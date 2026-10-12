@@ -1,6 +1,17 @@
 import SwiftUI
 
 struct ContentView: View {
+    var body: some View {
+        TabView {
+            NavigationStack { BrowserView() }
+                .tabItem { Label("浏览器", systemImage: "globe") }
+            DownloadListView()
+                .tabItem { Label("下载", systemImage: "arrow.down.circle") }
+        }
+    }
+}
+
+private struct DownloadListView: View {
     @ObservedObject private var store = DownloadStore.shared
     @StateObject private var drive = GoogleDriveService()
     @State private var link = ""
@@ -12,7 +23,7 @@ struct ContentView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("粘贴 HTTPS 直链或 Google Drive 文件链接", text: $link, axis: .vertical)
+                    TextField("备用：粘贴 HTTPS 直链或 Google Drive 文件链接", text: $link, axis: .vertical)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
@@ -28,9 +39,9 @@ struct ContentView: View {
                     }
                     .disabled(isPreparing || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } header: {
-                    Text("新建下载")
+                    Text("链接下载（备用方式）")
                 } footer: {
-                    Text("先在前台发起任务，然后可以切换 App 或锁屏；不要上滑强制关闭本 App。")
+                    Text("优先使用「浏览器」标签：打开分享网页，直接点击网页的下载按钮。此处保留直链/API 备用入口。")
                 }
 
                 Section("Google Drive 授权") {
@@ -50,7 +61,7 @@ struct ContentView: View {
                 Section {
                     if store.items.isEmpty {
                         ContentUnavailableView("暂无下载任务", systemImage: "square.and.arrow.down",
-                                               description: Text("粘贴文件链接即可开始下载。"))
+                                               description: Text("去「浏览器」打开分享链接，点击网页的下载按钮。"))
                     }
                     ForEach(store.items) { item in
                         DownloadRow(item: item, fileURL: store.fileURL(for: item),
@@ -100,6 +111,10 @@ struct ContentView: View {
         isPreparing = true
         defer { isPreparing = false }
         do {
+            if item.source == .browser {
+                show(DownloadError.unsupportedLink("网页登录下载可能带有短期 Cookie/令牌。请返回「浏览器」重新点击网站的下载按钮。"))
+                return
+            }
             // 重新请求 Google Token，避免旧授权头过期。
             let prepared = try await drive.prepare(item.originalURL)
             BackgroundDownloader.shared.enqueue(request: prepared.request,

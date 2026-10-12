@@ -4,6 +4,7 @@ import Foundation
 enum DownloadSource: String, Codable {
     case direct
     case googleDrive
+    case browser
 }
 
 enum DownloadStatus: String, Codable {

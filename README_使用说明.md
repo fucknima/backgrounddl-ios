@@ -1,94 +1,31 @@
-# 后台下载器（iOS 原生 SwiftUI 工程）
+# BackgroundDL — 网页分享链接后台下载器
 
-## 这是什么
+## 这版主要解决什么问题
 
-- iOS 17+，SwiftUI 原生界面，无服务器、无广告。
-- 普通 HTTPS 文件直链：粘贴后可以使用系统 URLSession 后台下载。
-- Google Drive 单文件链接：使用 Google 登录授权，通过 Drive API 下载有访问权限的文件。
-- 支持多个任务、下载进度、暂停/继续（在任务仍存在时）、取消、重试。
-- 下载完成写入 `在我的 iPhone 上 → 后台下载 → Downloads`，可在「文件」App 打开或通过 App 内分享。
-- Google Docs/Sheets/Slides 分别转换为 DOCX/XLSX/PPTX；Drawings 转为 PDF。
+不要求用户寻找文件直链。打开 App 的「浏览器」，粘贴别人分享的 HTTPS 网页链接（例如 Google Drive 分享页），在网页内点击原站的「下载」，App 尝试从 WebKit 导航 / Content-Disposition 响应识别文件下载，并转交给原生的 **background URLSession downloadTask**；随后可以切换 App 或锁屏。
 
-## 必备环境
+## 界面
 
-1. Mac + Xcode 15 或更高版本、iOS 17 或更高版本的 iPhone。
-2. Apple ID 用于 Xcode 自动签名。普通 Apple ID 可以通过 Xcode 安装到自己的设备上，但签名的有效期等限制依 Apple 规则执行。
-3. **Google Drive 需要配置自己的 OAuth Client ID**；普通 HTTPS 下载不需要 Google 配置。
+- **浏览器**：地址栏、网页、返回/前进/刷新。下载按钮若被 WebKit 识别为文件下载，App 会取消网页下载并新建后台下载任务。
+- **下载**：进度、暂停、继续、取消、分享/保存；仍保留直链和 Google Drive API 备用入口。
+- 默认文件保存位置：iPhone「文件」→「在我的 iPhone 上」→「后台下载」→ `Downloads`。
 
-## Xcode 打开、安装
+## Google Drive 和站点限制（务必阅读）
 
-1. 双击 `BackgroundDL.xcodeproj`。
-2. 打开 `BackgroundDL` Target → `Signing & Capabilities`：选择自己的 Team。
-3. 修改 Bundle Identifier（默认 `com.example.backgrounddl`，换成自己独有的，如 `com.example.yourname.downloads`）。
-4. 接上 iPhone 或使用无线调试，在 Xcode 选择设备，点击 Run。
-5. 首次编译 Xcode 会联网下载 GoogleSignIn-iOS 的 Swift Package 依赖。
+1. 公开可访问、服务器发出 **HTTP/HTTPS GET 文件响应** 的分享下载更容易接管。站点 Cookie 只从 App 自己的 WKWebView 获取、按对应请求域名匹配后传给 URLSession。**Safari 内已登录的 Cookie 不会自动共享**。
+2. Google 可能禁止用户在嵌入式 WKWebView 内登录（`disallowed_useragent`）。这是 Google 的安全政策，不应通过伪造浏览器 UA 或窃取 Safari Cookie 绕过。访问需要登录的私有文件，请使用合法 Google OAuth 授权后的 API 备用入口（需自己在 Google Cloud 配置 iOS Client ID 和允许的 scope）；此功能与「直接在网页点击」互补。
+3. `blob:` / `data:`、动态 JS 内存文件、页面内部 `fetch`、POST 表单、一次性且绑定浏览器会话的 URL、需要进一步确认的 Google 大文件下载，**不能保证成功转移**到后台 URLSession。页面仍可能需要先点击「继续下载」等确认按钮。浏览器无法接管时会明确提示，不会声称下载成功。
+4. 后台 URLSession 受 iOS 网络与电量调度限制；**从多任务界面强制关闭 App** 可能取消当前后台任务。暂停/继续仅暂停当前系统任务，不等于断点续传；系统任务丢失需重新点击网页下载。
+5. 对网页下载返回的 HTML 登录页/确认页，程序会提示失败，避免把网页当成下载文件保存。
 
-注意：这里只提供 **完整源码工程**，不是已经签名好的 IPA；当前制作环境不是 macOS，无法调用 Xcode 真机编译和签名。
+## 编译
 
-## Google Drive 登录配置（必须做）
+仓库 `main` 上每次推送自动执行 GitHub Actions `Build unsigned iOS IPA`，在 macOS 运行 `xcodebuild ... CODE_SIGNING_ALLOWED=NO`，把 `BackgroundDL.app` 打包为 `BackgroundDL-unsigned.ipa` 并上传至 Actions Artifacts。下载后仍需使用自己的有效签名证书签名才能安装。
 
-1. 打开 https://console.cloud.google.com/ 新建项目。
-2. `APIs & Services` → `Library`，启用 **Google Drive API**。
-3. 设置 `Google Auth Platform / OAuth consent screen`：应用测试中添加自己的 Google 邮箱为测试用户，并配置必要的权限（Drive `https://www.googleapis.com/auth/drive.readonly`）。
-4. `Credentials` → `Create credentials` → `OAuth client ID` → 类型选择 **iOS**。
-5. Bundle ID 必须与 Xcode 内 Target 的 Bundle Identifier **完全相同**。
-6. 把客户端 ID 写入 `BackgroundDL/Info.plist` 的 `GIDClientID`；格式示例：`12345678-abcxyz.apps.googleusercontent.com`。
-7. 把 Google 控制台显示的 **iOS URL scheme / REVERSED_CLIENT_ID** 写入 `Info.plist` → `CFBundleURLTypes` → `CFBundleURLSchemes`，格式示例：`com.googleusercontent.apps.12345678-abcxyz`。
-8. 再次运行 App，先点击 **登录 Google**，授权只读访问，然后粘贴 Google Drive 单文件分享链接。
+### 可选 Google Drive API 配置
 
-这个只读权限允许读取用户可访问的云端硬盘文件；不允许应用修改或删除云端文件。`drive.readonly` 是敏感/受限权限，公开分发可能需要 Google 审核。个人测试可按 Google 控制台的测试用户要求配置。
+仓库 Actions Secrets 可配置：`GOOGLE_CLIENT_ID`、`GOOGLE_URL_SCHEME`（反向 Client ID）。未配置时，**网页下载和普通 HTTP(S) 直链下载无需此配置**；Google Drive API 备用入口不具备 Google 登录权限。不要将私密凭据写入公开源码仓库。
 
-## 支持的链接
+## 隐私
 
-**普通 HTTPS 文件直链**：
-
-    https://example.org/files/movie.mp4
-
-**Google Drive 共享文件**：
-
-    https://drive.google.com/file/d/FILE_ID/view?usp=sharing
-    https://drive.google.com/open?id=FILE_ID
-    https://drive.google.com/uc?export=download&id=FILE_ID
-    https://docs.google.com/document/d/FILE_ID/edit
-
-Google Drive 分享链接里如果包含 `resourcekey` 参数，程序会把它作为 Drive API 的资源键发送。
-
-**不支持：** Google Drive 文件夹整包下载、需要网页里先登录/解验证码的第三方地址、Google Vids 特殊下载、磁力/BT、视频平台分段流媒体提取、绕过所有者禁下载限制。Google 原生 Workspace 文档的 `files.export` 接口有 Google 的导出大小限制（官方说明为 10 MB）。
-
-## 正常下载行为和限制
-
-- 开始任务需要 App 在前台执行初始授权和请求；进入下载状态后切换 App / 锁屏，系统会接管。
-- **不要手动上滑强制关闭 App**。这是苹果的系统限制，强杀会取消后台 URLSession 传输。
-- iOS 对后台网络调度有最终控制权；本 App 不能保证精确下载速度，也不能保证网络中断时所有服务器都支持续传。
-- 「暂停/继续」使用任务挂起与恢复；如果任务已因强制退出被系统移除，请用「重试」重新下载。重试会创建新任务，通常从头下载。
-- Google Drive 请求开始时会获取新 token；若极长时间后台传输后发生 `401`，回到 App 点「重试」即可重新授权请求。已下载字节能否重用依赖服务器及 iOS，当前版本不承诺跨进程断点续传。
-- 个别文件分享权限或防病毒/组织策略限制下载时会返回 `403`，不会绕过。
-- 只有真正返回文件数据的 HTTPS 链接才是可下载的；普通网页地址可能保存成 HTML，不会自动解析网页隐藏下载按钮。
-
-## 文件结构
-
-```
-BackgroundDL.xcodeproj/       Xcode 工程
-BackgroundDL/
-  BackgroundDLApp.swift       SwiftUI 入口/系统后台回调
-  ContentView.swift           中文界面
-  BackgroundDownloader.swift  后台 URLSession 下载引擎/文件保存
-  DownloadStore.swift         本地 JSON 任务持久化
-  GoogleDriveService.swift    Google 登录/Drive API 元数据和下载
-  DriveLinkParser.swift       Google Drive 分享链接解析
-  Models.swift                任务模型
-  Info.plist                  OAuth 配置/文件 App 可见配置
-```
-
-## 官方参考
-
-- Apple 后台下载: https://developer.apple.com/documentation/foundation/downloading-files-in-the-background
-- Google Drive 下载和导出: https://developers.google.com/workspace/drive/api/guides/manage-downloads
-- Google Sign-In iOS 安装: https://developers.google.com/identity/sign-in/ios/start-integrating
-- Google Drive 资源键: https://developers.google.com/workspace/drive/api/guides/resource-keys
-
-## 没有 Mac：用 GitHub Actions 构建未签名 IPA
-
-工程带有 `.github/workflows/构建未签名IPA.yml`。在 **你自己的 GitHub 仓库** 上传全部项目文件（包括隐藏的 `.github` 目录），代码上传到仓库 `main` 分支后会**自动触发编译**；也可以在 `Actions` → `Build unsigned iOS IPA` → `Run workflow` 手动重跑。构建完成后从本次运行的 Artifacts 取得 `BackgroundDL-unsigned.ipa`。
-
-这个文件 **不带苹果签名，不能直接点开安装**。需要你自己使用合法的开发者证书与签名方式签名，才能安装到 iPhone。GitHub Actions 构建也需要联网下载 Swift Package。注意 GitHub 仓库的源码不要填入密码、Google 登录令牌、签名证书；如需在 GitHub 构建时启用 Google 登录，可在仓库 `Settings → Secrets and variables → Actions` 中配置 `GOOGLE_CLIENT_ID` 和 `GOOGLE_URL_SCHEME` 两个 secrets；应用 Bundle ID 必须和 Google OAuth iOS 客户端登记值匹配。
+分享链接可能包含临时令牌；公开日志和 Issue 不要粘贴带密钥的下载地址。此 App 不需要云端代理服务器。浏览器 Cookie 仅在下载被用户点击触发时用于对应目标站点，跨站点跳转会移除敏感请求头。

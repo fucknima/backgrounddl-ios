@@ -72,6 +72,20 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
         }
     }
 
+    // 跨域跳转不携带原网站的 Cookie 或 Authorization，避免泄漏登录会话。
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        var safe = request
+        if response.url?.host?.lowercased() != request.url?.host?.lowercased() {
+            safe.setValue(nil, forHTTPHeaderField: "Cookie")
+            safe.setValue(nil, forHTTPHeaderField: "Authorization")
+            safe.setValue(nil, forHTTPHeaderField: "Referer")
+        }
+        completionHandler(safe)
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
                     totalBytesExpectedToWrite: Int64) {
@@ -98,6 +112,18 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
             }
             return
         }
+        // 防止分享页/登录页/Google Drive 病毒扫描确认页被误存为“下载成功”。
+        if marker.source == .browser,
+           let response = downloadTask.response as? HTTPURLResponse,
+           let mime = response.mimeType?.lowercased(),
+           (mime == "text/html" || mime == "application/xhtml+xml"),
+           !(response.value(forHTTPHeaderField: "Content-Disposition") ?? "").lowercased().contains("attachment") {
+            Task { @MainActor in
+                DownloadStore.shared.update(marker.id, status: .failed,
+                    message: "服务器返回网页而不是文件（可能需要登录、确认大文件或链接过期）。请返回浏览器处理提示后重新点下载。")
+            }
+            return
+        }
         do {
             let directory = DownloadStore.downloadFolder
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -106,9 +132,10 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
                 ofItemAtPath: directory.path)
             var candidate = marker.filename
             // 直链如果 URL 文件名泛泛，优先用服务器告知的文件名。
-            if marker.source == .direct,
-               (candidate == "download" || candidate == "file" || candidate.hasPrefix("下载文件_")),
-               let suggested = downloadTask.response?.suggestedFilename {
+            if (marker.source == .direct || marker.source == .browser),
+               (candidate == "download" || candidate == "file" || candidate.hasPrefix("下载文件_") || marker.source == .browser),
+               let suggested = downloadTask.response?.suggestedFilename,
+               suggested != "download", !suggested.isEmpty {
                 candidate = suggested
             }
             candidate = Self.safeFilename(candidate)

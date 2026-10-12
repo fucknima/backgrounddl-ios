@@ -5,6 +5,7 @@
 	objectVersion = 56;
 	objects = {
 /* Begin PBXBuildFile section */
+        4F70A7C1B9004C13B6181990 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F70A7C1B9004C13B6181991 /* BrowserView.swift */; };
 		D9E8D39A12BC275A2BF7EEDE /* BackgroundDLApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */; };
 		82FDB5029E6F8623BBAF7240 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E0F96C682DC1558B12A4D3 /* ContentView.swift */; };
 		7FCA99F642FA2B3B5E5281AC /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22586ABB49CABC9DB8DB398 /* Models.swift */; };
@@ -16,6 +17,7 @@
 		742EB8FBFD0FB8C001CA2C59 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 5673B656D59A3575A41B83D2 /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
+        4F70A7C1B9004C13B6181991 /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDLApp.swift; sourceTree = "<group>"; };
 		48E0F96C682DC1558B12A4D3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C22586ABB49CABC9DB8DB398 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -43,7 +45,7 @@
         };
 		CF3F3E8EE8BB771CB8A76EAD /* BackgroundDL */ = {
             isa = PBXGroup;
-            children = (00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */, 48E0F96C682DC1558B12A4D3 /* ContentView.swift */, C22586ABB49CABC9DB8DB398 /* Models.swift */, B64706E02A8AE6FFB54588D8 /* DownloadStore.swift */, 6B91DDE9D7CF98E61B5264FE /* BackgroundDownloader.swift */, 8E979D92830F6FAC59B2ABA6 /* GoogleDriveService.swift */, FD4C76256D59F9ECCB447711 /* DriveLinkParser.swift */, 93FE83C6D4F6B073FBE750AE /* Assets.xcassets */, 17089704BF5954E6B87ED25A /* Info.plist */, );
+            children = (00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */, 48E0F96C682DC1558B12A4D3 /* ContentView.swift */, 4F70A7C1B9004C13B6181991 /* BrowserView.swift */, C22586ABB49CABC9DB8DB398 /* Models.swift */, B64706E02A8AE6FFB54588D8 /* DownloadStore.swift */, 6B91DDE9D7CF98E61B5264FE /* BackgroundDownloader.swift */, 8E979D92830F6FAC59B2ABA6 /* GoogleDriveService.swift */, FD4C76256D59F9ECCB447711 /* DriveLinkParser.swift */, 93FE83C6D4F6B073FBE750AE /* Assets.xcassets */, 17089704BF5954E6B87ED25A /* Info.plist */, );
             path = BackgroundDL;
             sourceTree = "<group>";
         };
@@ -101,7 +103,7 @@
 		EE131AE163B681F0331319F3 /* Sources */ = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (D9E8D39A12BC275A2BF7EEDE /* BackgroundDLApp.swift in Sources */, 82FDB5029E6F8623BBAF7240 /* ContentView.swift in Sources */, 7FCA99F642FA2B3B5E5281AC /* Models.swift in Sources */, E26B94345204CC4053130BDD /* DownloadStore.swift in Sources */, F14092C66B0D9CBA53ADC684 /* BackgroundDownloader.swift in Sources */, FAFD4F791757B4C315260BD4 /* GoogleDriveService.swift in Sources */, 11F3B1AF6A968770F6B0A945 /* DriveLinkParser.swift in Sources */,);
+            files = (D9E8D39A12BC275A2BF7EEDE /* BackgroundDLApp.swift in Sources */, 82FDB5029E6F8623BBAF7240 /* ContentView.swift in Sources */, 4F70A7C1B9004C13B6181990 /* BrowserView.swift in Sources */, 7FCA99F642FA2B3B5E5281AC /* Models.swift in Sources */, E26B94345204CC4053130BDD /* DownloadStore.swift in Sources */, F14092C66B0D9CBA53ADC684 /* BackgroundDownloader.swift in Sources */, FAFD4F791757B4C315260BD4 /* GoogleDriveService.swift in Sources */, 11F3B1AF6A968770F6B0A945 /* DriveLinkParser.swift in Sources */,);
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXSourcesBuildPhase section */
