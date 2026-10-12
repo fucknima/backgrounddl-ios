@@ -21,6 +21,35 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
 
     private override init() { super.init() }
 
+    // Tombstones prevent a download-complete callback racing with user deletion
+    // from recreating a removed file/record in the Files directory.
+    private let removedLock = NSLock()
+    private var removedIDs = Set<UUID>()
+
+    private func markRemoved(_ id: UUID) {
+        removedLock.lock()
+        removedIDs.insert(id)
+        removedLock.unlock()
+    }
+
+    private func wasRemoved(_ id: UUID) -> Bool {
+        removedLock.lock()
+        defer { removedLock.unlock() }
+        return removedIDs.contains(id)
+    }
+
+    @MainActor
+    func remove(id: UUID, deleteFile: Bool) throws {
+        // Delete the associated local file first; if that fails, keep the task record.
+        try DownloadStore.shared.remove(id: id, deleteFile: deleteFile)
+        markRemoved(id)
+        session.getAllTasks { tasks in
+            for task in tasks where TaskMarker.decode(task.taskDescription)?.id == id {
+                task.cancel()
+            }
+        }
+    }
+
     @MainActor
     func enqueue(request: URLRequest, originalURL: String, name: String, source: DownloadSource) {
         let item = DownloadItem(
@@ -36,13 +65,21 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
 
     func reconnect() {
         session.getAllTasks { tasks in
-            let pairs = tasks.compactMap { task -> (UUID, Bool)? in
-                guard let marker = TaskMarker.decode(task.taskDescription) else { return nil }
-                return (marker.id, task.state == .suspended)
-            }
-            let active = Set(pairs.map(\.0))
-            let paused = Set(pairs.filter(\.1).map(\.0))
             Task { @MainActor in
+                let storedIDs = Set(DownloadStore.shared.items.map(\.id))
+                // Cancel orphaned jobs left behind by a previous remove/crash.
+                var pairs: [(UUID, Bool)] = []
+                for task in tasks {
+                    guard let marker = TaskMarker.decode(task.taskDescription) else { continue }
+                    if !storedIDs.contains(marker.id) {
+                        self.markRemoved(marker.id)
+                        task.cancel()
+                    } else {
+                        pairs.append((marker.id, task.state == .suspended))
+                    }
+                }
+                let active = Set(pairs.map(\.0))
+                let paused = Set(pairs.filter(\.1).map(\.0))
                 DownloadStore.shared.reconcile(activeIDs: active, pausedIDs: paused)
             }
         }
@@ -116,7 +153,8 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
-        guard let marker = TaskMarker.decode(downloadTask.taskDescription) else { return }
+        guard let marker = TaskMarker.decode(downloadTask.taskDescription),
+              !wasRemoved(marker.id) else { return }
         if let response = downloadTask.response as? HTTPURLResponse,
            !(200...299).contains(response.statusCode) {
             let code = response.statusCode

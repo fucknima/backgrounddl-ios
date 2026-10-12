@@ -159,6 +159,63 @@ final class DownloadStore: ObservableObject {
         }
     }
 
+    // Remove a record without touching its file unless the user explicitly requests both.
+    // A completed file remains available in Files after "remove record".
+    func remove(id: UUID, deleteFile: Bool) throws {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        let item = items[index]
+        if deleteFile, item.status == .completed, let name = item.savedFilename {
+            let folder = Self.downloadFolder.standardizedFileURL
+            let file = folder.appendingPathComponent(name, isDirectory: false).standardizedFileURL
+            guard file.deletingLastPathComponent() == folder else {
+                throw DownloadFileError.invalidFilename
+            }
+            if FileManager.default.fileExists(atPath: file.path) {
+                try FileManager.default.removeItem(at: file)
+            }
+        }
+        items.remove(at: index)
+        lastProgressWrite[id] = nil
+        progressSamples[id] = nil
+        persist()
+        DownloadActivityManager.shared.refresh(items, force: true)
+    }
+
+    func clearCompleted(deleteFiles: Bool) throws {
+        // Stop if a file cannot be deleted, leaving that record visible for retry.
+        let ids = items.filter { $0.status == .completed }.map(\.id)
+        for id in ids { try remove(id: id, deleteFile: deleteFiles) }
+    }
+
+    func renameCompleted(id: UUID, to proposedName: String) throws {
+        guard let index = items.firstIndex(where: { $0.id == id }),
+              items[index].status == .completed,
+              let oldName = items[index].savedFilename else {
+            throw DownloadFileError.notCompleted
+        }
+        var newName = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty, newName != ".", newName != "..",
+              !newName.contains("/"), !newName.contains("\\"),
+              !newName.contains(":"), !newName.contains("\n"), !newName.contains("\r") else {
+            throw DownloadFileError.invalidFilename
+        }
+        // Keep the old file extension when a new name does not supply one.
+        let oldExtension = URL(fileURLWithPath: oldName).pathExtension
+        if !oldExtension.isEmpty && URL(fileURLWithPath: newName).pathExtension.isEmpty {
+            newName += "." + oldExtension
+        }
+        if oldName == newName { return }
+        let folder = Self.downloadFolder
+        let source = folder.appendingPathComponent(oldName)
+        let destination = folder.appendingPathComponent(newName)
+        guard FileManager.default.fileExists(atPath: source.path) else { throw DownloadFileError.fileMissing }
+        guard !FileManager.default.fileExists(atPath: destination.path) else { throw DownloadFileError.fileExists }
+        try FileManager.default.moveItem(at: source, to: destination)
+        items[index].savedFilename = newName
+        items[index].filename = newName
+        persist()
+    }
+
     func fileURL(for item: DownloadItem) -> URL? {
         guard item.status == .completed, let name = item.savedFilename else { return nil }
         return Self.downloadFolder.appendingPathComponent(name)
@@ -181,5 +238,18 @@ final class DownloadStore: ObservableObject {
     nonisolated static var downloadFolder: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent("Downloads", isDirectory: true)
+    }
+}
+
+private enum DownloadFileError: LocalizedError {
+    case invalidFilename, notCompleted, fileMissing, fileExists
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidFilename: return "文件名不合法。"
+        case .notCompleted: return "只能重命名已完成的文件。"
+        case .fileMissing: return "本地文件不存在，可能已在文件 App 中移动或删除。"
+        case .fileExists: return "目标文件名已存在，请换一个名称。"
+        }
     }
 }

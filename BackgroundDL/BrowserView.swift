@@ -47,6 +47,7 @@ final class BrowserState: ObservableObject {
 struct BrowserView: View {
     @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
+    @AppStorage("bgdl.forceDarkWebPages") private var forceDarkWebPages = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -114,7 +115,7 @@ struct BrowserView: View {
 
             // Let the actual website occupy almost all vertical space.
             ZStack {
-                BrowserWebView(state: state)
+                BrowserWebView(state: state, forceDarkWebPages: forceDarkWebPages)
                 if state.webView?.url == nil && state.loadURL == nil {
                     ContentUnavailableView("打开网页", systemImage: "globe",
                         description: Text("粘贴分享网址，在网页中点击下载。"))
@@ -141,7 +142,16 @@ struct BrowserView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .frame(maxWidth: 140, alignment: .trailing)
+                    .frame(maxWidth: 120, alignment: .trailing)
+                Menu {
+                    Toggle(isOn: $forceDarkWebPages) {
+                        Label("深色模式下强制网页变暗", systemImage: "moon.stars")
+                    }
+                    Text("默认跟随网站和系统主题；若网页不支持深色，可手动开启。某些网站可能显示异常。")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("网页外观")
             }
             .font(.body.weight(.semibold))
             .buttonStyle(.plain)
@@ -164,8 +174,12 @@ struct BrowserView: View {
 
 private struct BrowserWebView: UIViewRepresentable {
     @ObservedObject var state: BrowserState
+    let forceDarkWebPages: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
-    func makeCoordinator() -> Coordinator { Coordinator(state: state) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(state: state, forceDarkPages: forceDarkWebPages, systemDark: colorScheme == .dark)
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -175,24 +189,64 @@ private struct BrowserWebView: UIViewRepresentable {
         browser.navigationDelegate = context.coordinator
         browser.uiDelegate = context.coordinator
         browser.allowsBackForwardNavigationGestures = true
+        browser.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        browser.isOpaque = false
+        browser.backgroundColor = .systemBackground
+        browser.underPageBackgroundColor = .systemBackground
         state.webView = browser
         if let url = state.loadURL { browser.load(URLRequest(url: url)) }
         return browser
     }
 
-    func updateUIView(_ browser: WKWebView, context: Context) { }
+    func updateUIView(_ browser: WKWebView, context: Context) {
+        browser.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        browser.underPageBackgroundColor = .systemBackground
+        context.coordinator.forceDarkPages = forceDarkWebPages
+        context.coordinator.systemDark = colorScheme == .dark
+        context.coordinator.syncPageTheme(webView: browser)
+    }
 
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private let state: BrowserState
+        var forceDarkPages: Bool
+        var systemDark: Bool
 
-        init(state: BrowserState) { self.state = state }
+        init(state: BrowserState, forceDarkPages: Bool, systemDark: Bool) {
+            self.state = state
+            self.forceDarkPages = forceDarkPages
+            self.systemDark = systemDark
+        }
+
+        func syncPageTheme(webView: WKWebView) {
+            // Websites implementing prefers-color-scheme are already handled by WebKit.
+            // Optional CSS fallback is explicitly enabled by the user; do not invert images.
+            let enabled = forceDarkPages && systemDark
+            let script = #"""
+            (() => {
+              const id = 'bgdl-optional-dark-style';
+              const old = document.getElementById(id);
+              if (!\#(enabled ? "true" : "false")) { if (old) old.remove(); return; }
+              if (old) return;
+              const tag = document.createElement('style');
+              tag.id = id;
+              tag.textContent = `
+                html { color-scheme: dark !important; background: #11151c !important; }
+                body { background: #11151c !important; color: #e9edf3 !important; }
+                input, textarea, select, button { color-scheme: dark !important; }
+              `;
+              (document.head || document.documentElement).appendChild(tag);
+            })();
+            """#
+            webView.evaluateJavaScript(script, completionHandler: nil)
+        }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             state.updateNavigation(webView)
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             state.updateNavigation(webView)
+            syncPageTheme(webView: webView)
         }
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             state.updateNavigation(webView)
