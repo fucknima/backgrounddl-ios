@@ -15,9 +15,9 @@ final class DownloadActivityManager {
 
     func refresh(_ items: [DownloadItem], force: Bool = false) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-        let active = items.first(where: { $0.status == .running })
+        let activeItem = items.first(where: { $0.status == .running })
         let existing = Activity<DownloadActivityAttributes>.activities
-        guard let current = active else {
+        guard let active = activeItem else {
             // Always end once a transfer terminates or when all transfers are paused.
             for activity in existing {
                 let item = items.first { $0.id.uuidString == activity.attributes.downloadID }
