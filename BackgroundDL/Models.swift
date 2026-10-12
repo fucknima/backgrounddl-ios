@@ -25,6 +25,8 @@ struct DownloadItem: Identifiable, Codable {
     var savedFilename: String?
     var createdAt: Date
     var resumeDataBase64: String?
+    var speedBytesPerSecond: Double?
+    var etaSeconds: TimeInterval?
 
     var fraction: Double? {
         guard totalBytes > 0 else { return nil }
@@ -36,6 +38,22 @@ struct DownloadItem: Identifiable, Codable {
         case .direct: return "直链"
         case .browser: return "网页"
         }
+    }
+
+    var speedLabel: String {
+        guard let speedBytesPerSecond, speedBytesPerSecond > 0 else { return "--" }
+        return ByteCountFormatter.string(fromByteCount: Int64(speedBytesPerSecond), countStyle: .file) + "/s"
+    }
+
+    var etaLabel: String {
+        guard let etaSeconds, etaSeconds.isFinite, etaSeconds > 0 else { return "--" }
+        let seconds = Int(etaSeconds.rounded())
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 { return String(format: "%dh %02dm", h, m) }
+        if m > 0 { return String(format: "%dm %02ds", m, s) }
+        return "\(s)s"
     }
 }
 

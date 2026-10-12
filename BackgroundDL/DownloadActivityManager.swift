@@ -1,9 +1,6 @@
 import ActivityKit
 import Foundation
 
-// Only one Live Activity is used, to avoid flooding the Dynamic Island for batch downloads.
-// iOS can suspend our process while a background URLSession continues. Updates in that
-// state aren't guaranteed until the system relaunches the app or delivers an event.
 @MainActor
 final class DownloadActivityManager {
     static let shared = DownloadActivityManager()
@@ -18,19 +15,20 @@ final class DownloadActivityManager {
         let activeItem = items.first(where: { $0.status == .running })
         let existing = Activity<DownloadActivityAttributes>.activities
         guard let active = activeItem else {
-            // Always end once a transfer terminates or when all transfers are paused.
             for activity in existing {
                 let item = items.first { $0.id.uuidString == activity.attributes.downloadID }
-                let phase = item?.status.rawValue ?? "completed"
                 let old = activity.content.state
                 let state = DownloadActivityAttributes.ContentState(
                     fraction: item?.fraction ?? old.fraction,
                     written: item?.downloadedBytes ?? old.written,
                     expected: item?.totalBytes ?? old.expected,
-                    phase: phase
+                    phase: item?.status.rawValue ?? "completed",
+                    speedBytesPerSecond: nil,
+                    etaSeconds: nil,
+                    lastUpdated: Date()
                 )
                 Task {
-                    await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .after(Date().addingTimeInterval(6)))
+                    await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .after(Date().addingTimeInterval(8)))
                 }
             }
             lastRenderedID = nil
@@ -45,9 +43,8 @@ final class DownloadActivityManager {
 
         let phase = active.status.rawValue
         let now = Date()
-        // Reduce UI/ActivityKit churn. This isn't a promise of background update cadence.
         if !force, lastRenderedID == active.id, lastRenderedPhase == phase,
-           now.timeIntervalSince(lastUpdateAt) < 12 { return }
+           now.timeIntervalSince(lastUpdateAt) < 2.0 { return }
         lastRenderedID = active.id
         lastRenderedPhase = phase
         lastUpdateAt = now
@@ -56,9 +53,12 @@ final class DownloadActivityManager {
             fraction: active.fraction ?? -1,
             written: active.downloadedBytes,
             expected: active.totalBytes,
-            phase: phase
+            phase: phase,
+            speedBytesPerSecond: active.speedBytesPerSecond,
+            etaSeconds: active.etaSeconds,
+            lastUpdated: now
         )
-        let content = ActivityContent(state: state, staleDate: now.addingTimeInterval(180))
+        let content = ActivityContent(state: state, staleDate: now.addingTimeInterval(60))
         if let activity = currentActivities.first {
             Task { await activity.update(content) }
         } else {

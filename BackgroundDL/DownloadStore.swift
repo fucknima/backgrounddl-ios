@@ -7,7 +7,14 @@ final class DownloadStore: ObservableObject {
 
     @Published private(set) var items: [DownloadItem] = []
     private var lastProgressWrite: [UUID: Date] = [:]
+    private var progressSamples: [UUID: ProgressSample] = [:]
     private let databaseURL: URL
+
+    private struct ProgressSample {
+        var bytes: Int64
+        var date: Date
+        var smoothedSpeed: Double?
+    }
 
     private init() {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -32,6 +39,8 @@ final class DownloadStore: ObservableObject {
 
     func add(_ item: DownloadItem) {
         items.insert(item, at: 0)
+        // The first callback establishes a baseline; resumeData can already contain gigabytes.
+        progressSamples[item.id] = nil
         persist()
         DownloadActivityManager.shared.refresh(items, force: true)
     }
@@ -44,8 +53,21 @@ final class DownloadStore: ObservableObject {
         if status == .completed, items[index].totalBytes > 0 {
             items[index].downloadedBytes = items[index].totalBytes
         }
+        if status != .running {
+            items[index].speedBytesPerSecond = nil
+            items[index].etaSeconds = nil
+            progressSamples[id] = nil
+        } else {
+            // Do not reuse a speed sample recorded before a pause or process restart.
+            items[index].speedBytesPerSecond = nil
+            items[index].etaSeconds = nil
+            progressSamples[id] = nil
+        }
         if status == .completed || status == .running || status == .cancelled || status == .failed {
             items[index].resumeDataBase64 = nil
+        }
+        if status == .completed || status == .cancelled || status == .failed {
+            progressSamples[id] = nil
         }
         persist()
         DownloadActivityManager.shared.refresh(items, force: true)
@@ -67,6 +89,36 @@ final class DownloadStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         guard items[index].status == .running else { return }
         let now = Date()
+
+        if var sample = progressSamples[id] {
+            let deltaBytes = written - sample.bytes
+            let deltaTime = now.timeIntervalSince(sample.date)
+            if deltaBytes < 0 {
+                // A restarted task may begin from zero; never report a negative speed.
+                sample = ProgressSample(bytes: written, date: now, smoothedSpeed: nil)
+                items[index].speedBytesPerSecond = nil
+                items[index].etaSeconds = nil
+            } else if deltaTime >= 0.8 {
+                let instant = Double(deltaBytes) / deltaTime
+                // EMA smooths bursty download callbacks; a zero delta clears stale speeds.
+                let smoothed = sample.smoothedSpeed.map { $0 * 0.55 + instant * 0.45 } ?? instant
+                sample.smoothedSpeed = smoothed
+                items[index].speedBytesPerSecond = smoothed >= 1 ? smoothed : nil
+                if expected > written, smoothed > 1 {
+                    items[index].etaSeconds = Double(expected - written) / smoothed
+                } else {
+                    items[index].etaSeconds = nil
+                }
+                sample.bytes = written
+                sample.date = now
+            }
+            progressSamples[id] = sample
+        } else {
+            progressSamples[id] = ProgressSample(bytes: written, date: now, smoothedSpeed: nil)
+            items[index].speedBytesPerSecond = nil
+            items[index].etaSeconds = nil
+        }
+
         if let last = lastProgressWrite[id], now.timeIntervalSince(last) < 0.35,
            !(expected > 0 && written >= expected) { return }
         items[index].downloadedBytes = written
@@ -84,12 +136,18 @@ final class DownloadStore: ObservableObject {
                     if items[i].status == .running {
                         items[i].status = items[i].resumeDataBase64 == nil ? .failed : .paused
                         items[i].errorMessage = items[i].resumeDataBase64 == nil ? "后台任务已中断，可点击重试。" : nil
+                        items[i].speedBytesPerSecond = nil
+                        items[i].etaSeconds = nil
                         changed = true
                     }
                 } else {
                     let status: DownloadStatus = pausedIDs.contains(items[i].id) ? .paused : .running
                     if items[i].status != status {
                         items[i].status = status
+                        if status != .running {
+                            items[i].speedBytesPerSecond = nil
+                            items[i].etaSeconds = nil
+                        }
                         changed = true
                     }
                 }
@@ -104,6 +162,20 @@ final class DownloadStore: ObservableObject {
     func fileURL(for item: DownloadItem) -> URL? {
         guard item.status == .completed, let name = item.savedFilename else { return nil }
         return Self.downloadFolder.appendingPathComponent(name)
+    }
+
+    var runningCount: Int {
+        items.filter { $0.status == .running }.count
+    }
+
+    var completedCount: Int {
+        items.filter { $0.status == .completed }.count
+    }
+
+    var aggregateSpeedLabel: String {
+        let total = items.compactMap(\.speedBytesPerSecond).reduce(0, +)
+        guard total > 0 else { return "--" }
+        return ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file) + "/s"
     }
 
     nonisolated static var downloadFolder: URL {

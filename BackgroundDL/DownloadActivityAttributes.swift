@@ -7,6 +7,9 @@ struct DownloadActivityAttributes: ActivityAttributes {
         var written: Int64
         var expected: Int64
         var phase: String
+        var speedBytesPerSecond: Double?
+        var etaSeconds: Double?
+        var lastUpdated: Date
     }
 
     var downloadID: String

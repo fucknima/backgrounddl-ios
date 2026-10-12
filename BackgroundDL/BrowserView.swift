@@ -1,11 +1,10 @@
 import SwiftUI
 import WebKit
 
-// 网页导航只是前台 UI；真正下载必须交给独立的后台 URLSession。
 @MainActor
 final class BrowserState: ObservableObject {
     @Published var address = ""
-    @Published var currentTitle = "网页下载"
+    @Published var currentTitle = "浏览器"
     @Published var isLoading = false
     @Published var canGoBack = false
     @Published var canGoForward = false
@@ -22,7 +21,7 @@ final class BrowserState: ObservableObject {
         guard let url = URL(string: normalized),
               url.scheme?.lowercased() == "https", url.host != nil,
               url.user == nil, url.password == nil else {
-            report("请粘贴 HTTPS 分享链接；其他协议不受支持。")
+            report("请输入有效的 HTTPS 网址。")
             return
         }
         loadURL = url
@@ -51,77 +50,108 @@ struct BrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            // One compact address row, rather than a redundant headline and instruction card.
+            HStack(spacing: 9) {
                 Image(systemName: "lock.shield")
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
-                TextField("粘贴别人的文件分享链接", text: $state.address)
+                TextField("搜索或粘贴分享链接", text: $state.address)
+                    .font(.subheadline)
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .font(.subheadline)
-                    .submitLabel(.go)
                     .focused($isEditingAddress)
+                    .submitLabel(.go)
                     .onSubmit(open)
                     .accessibilityIdentifier("browserAddress")
-                Button("前往", action: open)
-                    .buttonStyle(.borderedProminent)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-
-            HStack(spacing: 20) {
-                Button { state.webView?.goBack() } label: {
-                    Image(systemName: "chevron.left")
-                }.disabled(!state.canGoBack)
-                Button { state.webView?.goForward() } label: {
-                    Image(systemName: "chevron.right")
-                }.disabled(!state.canGoForward)
-                Button { state.webView?.reload() } label: {
-                    Image(systemName: "arrow.clockwise")
+                if isEditingAddress && !state.address.isEmpty {
+                    Button {
+                        state.address = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("清空地址")
                 }
-                .disabled(state.webView?.url == nil)
-                Spacer()
-                if state.isLoading { ProgressView().controlSize(.small) }
-                Text("网页点击下载 → 后台任务")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Button(action: open) {
+                    Text("前往")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.cyan)
+                .disabled(state.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .padding(.horizontal, 17)
-            .padding(.vertical, 10)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .padding(.leading, 15)
+            .padding(.trailing, 6)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
             .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .padding(.bottom, 8)
+            .padding(.vertical, 8)
 
             if !state.notice.isEmpty {
-                HStack {
+                HStack(spacing: 8) {
                     Image(systemName: "arrow.down.circle.fill")
-                    Text(state.notice).lineLimit(2)
-                    Spacer()
-                    Button { state.notice = "" } label: {
+                        .foregroundStyle(.cyan)
+                    Text(state.notice)
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    Button {
+                        state.notice = ""
+                    } label: {
                         Image(systemName: "xmark.circle.fill")
                     }
+                    .accessibilityLabel("关闭提示")
                 }
                 .font(.caption)
-                .padding(10)
-                .background(Color.accentColor.opacity(0.10))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(.thinMaterial)
             }
 
+            Rectangle().fill(Color(uiColor: .separator).opacity(0.35)).frame(height: 0.5)
+
+            // Let the actual website occupy almost all vertical space.
             ZStack {
                 BrowserWebView(state: state)
                 if state.webView?.url == nil && state.loadURL == nil {
-                    ContentUnavailableView("打开分享网页", systemImage: "globe",
-                        description: Text("粘贴 HTTPS 分享地址，在网页上直接点击下载。成功接管的文件将交给系统后台下载。"))
+                    ContentUnavailableView("打开网页", systemImage: "globe",
+                        description: Text("粘贴分享网址，在网页中点击下载。"))
                         .allowsHitTesting(false)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            HStack(spacing: 24) {
+                Button { state.webView?.goBack() } label: { Image(systemName: "chevron.left") }
+                    .disabled(!state.canGoBack)
+                    .accessibilityLabel("返回")
+                Button { state.webView?.goForward() } label: { Image(systemName: "chevron.right") }
+                    .disabled(!state.canGoForward)
+                    .accessibilityLabel("前进")
+                Button { state.webView?.reload() } label: { Image(systemName: "arrow.clockwise") }
+                    .disabled(state.webView?.url == nil)
+                    .accessibilityLabel("刷新")
+                Spacer(minLength: 8)
+                if state.isLoading {
+                    ProgressView().controlSize(.small)
+                }
+                Text(state.currentTitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 140, alignment: .trailing)
+            }
+            .font(.body.weight(.semibold))
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.regularMaterial)
         }
-        .navigationTitle("浏览器")
-        .navigationBarTitleDisplayMode(.inline)
-        .alert("下载提示", isPresented: $state.showMessage) {
+        .background(Color(uiColor: .systemBackground))
+        .toolbar(.hidden, for: .navigationBar)
+        .alert("网页提示", isPresented: $state.showMessage) {
             Button("确定", role: .cancel) { }
         } message: { Text(state.message) }
     }
@@ -139,7 +169,7 @@ private struct BrowserWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default() // 持久保存站点 Cookie；不读取 Safari 的 Cookie。
+        configuration.websiteDataStore = .default()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         let browser = WKWebView(frame: .zero, configuration: configuration)
         browser.navigationDelegate = context.coordinator
@@ -150,9 +180,7 @@ private struct BrowserWebView: UIViewRepresentable {
         return browser
     }
 
-    func updateUIView(_ browser: WKWebView, context: Context) {
-        // 不在这里根据 address 重新加载，否则每次重定向/状态刷新都可能重复下载。
-    }
+    func updateUIView(_ browser: WKWebView, context: Context) { }
 
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
@@ -172,8 +200,7 @@ private struct BrowserWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             state.updateNavigation(webView)
         }
-        // 网页下载被转交后台 URLSession 后，WebKit 会将原本的页面跳转标记为中断。
-        // WebKitErrorDomain 102 和 NSURLErrorCancelled(-999) 都是预期的取消，不应弹网页错误。
+
         private func isExpectedNavigationCancellation(_ error: Error) -> Bool {
             let nsError = error as NSError
             return (nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled)
@@ -186,7 +213,6 @@ private struct BrowserWebView: UIViewRepresentable {
             state.report("页面打开失败：\(error.localizedDescription)")
         }
 
-        // <a download>、WebKit 标记为下载的链接，由独立后台 URLSession 接管。
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction,
                      preferences: WKWebpagePreferences,
@@ -199,7 +225,6 @@ private struct BrowserWebView: UIViewRepresentable {
             decisionHandler(.allow, preferences)
         }
 
-        // 服务器 Content-Disposition: attachment 或不可在页面展示的 MIME 类型。
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationResponse: WKNavigationResponse,
                      decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
@@ -213,14 +238,12 @@ private struct BrowserWebView: UIViewRepresentable {
             let attachment = disposition.contains("attachment")
             if attachment || !navigationResponse.canShowMIMEType {
                 decisionHandler(.cancel)
-                capture(URLRequest(url: url),
-                        suggestedName: navigationResponse.response.suggestedFilename, browser: webView)
+                capture(URLRequest(url: url), suggestedName: navigationResponse.response.suggestedFilename, browser: webView)
             } else {
                 decisionHandler(.allow)
             }
         }
 
-        // 网站 target=_blank / window.open 常用于真正的下载按钮。
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                      for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
             if navigationAction.targetFrame == nil {
@@ -234,8 +257,7 @@ private struct BrowserWebView: UIViewRepresentable {
         }
 
         private func capture(_ original: URLRequest, suggestedName: String?, browser: WKWebView) {
-            guard let url = original.url, url.scheme?.lowercased() == "https",
-                  url.host != nil, url.user == nil, url.password == nil else {
+            guard let url = original.url, url.scheme?.lowercased() == "https", url.host != nil, url.user == nil, url.password == nil else {
                 state.report("该网页使用 blob:、data: 或其他临时下载协议，无法交给 iOS 后台下载。")
                 return
             }
@@ -268,7 +290,6 @@ private struct BrowserWebView: UIViewRepresentable {
                     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
                 }
                 if let referer, referer.scheme?.lowercased() == "https" {
-                    // 只向相同站点提供完整来源 URL，避免将分享链接泄露到其他域名。
                     if referer.host?.lowercased() == host {
                         request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer")
                     } else if let originHost = referer.host {
@@ -276,13 +297,10 @@ private struct BrowserWebView: UIViewRepresentable {
                     }
                 }
                 let last = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
-                let fallback = last.isEmpty || last == "/" || last == "download" || last == "uc"
-                    ? "下载文件_\(UUID().uuidString.prefix(8))" : last
-                let name = (suggestedName?.isEmpty == false && suggestedName != "download")
-                    ? suggestedName! : fallback
-                BackgroundDownloader.shared.enqueue(request: request, originalURL: url.absoluteString,
-                                                     name: name, source: .browser)
-                state.notice = "已接管：\(name)。切到「下载」查看进度。"
+                let fallback = last.isEmpty || last == "/" || last == "download" || last == "uc" ? "下载文件_\(UUID().uuidString.prefix(8))" : last
+                let name = (suggestedName?.isEmpty == false && suggestedName != "download") ? suggestedName! : fallback
+                BackgroundDownloader.shared.enqueue(request: request, originalURL: url.absoluteString, name: name, source: .browser)
+                state.notice = "已接管：\(name)。切到“下载”页查看速度、预计完成时间与进度。"
             }
         }
     }
