@@ -47,7 +47,7 @@ final class BrowserState: ObservableObject {
 struct BrowserView: View {
     @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
-    @AppStorage("bgdl.forceDarkWebPages") private var forceDarkWebPages = false
+    @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -115,7 +115,7 @@ struct BrowserView: View {
 
             // Let the actual website occupy almost all vertical space.
             ZStack {
-                BrowserWebView(state: state, forceDarkWebPages: forceDarkWebPages)
+                BrowserWebView(state: state, appearanceMode: webAppearanceMode)
                 if state.webView?.url == nil && state.loadURL == nil {
                     ContentUnavailableView("打开网页", systemImage: "globe",
                         description: Text("粘贴分享网址，在网页中点击下载。"))
@@ -144,10 +144,22 @@ struct BrowserView: View {
                     .lineLimit(1)
                     .frame(maxWidth: 120, alignment: .trailing)
                 Menu {
-                    Toggle(isOn: $forceDarkWebPages) {
-                        Label("深色模式下强制网页变暗", systemImage: "moon.stars")
+                    Button {
+                        webAppearanceMode = "auto"
+                    } label: {
+                        Label("智能深色（推荐）", systemImage: webAppearanceMode == "auto" ? "checkmark.circle.fill" : "moon.stars")
                     }
-                    Text("默认跟随网站和系统主题；若网页不支持深色，可手动开启。某些网站可能显示异常。")
+                    Button {
+                        webAppearanceMode = "always"
+                    } label: {
+                        Label("始终深色", systemImage: webAppearanceMode == "always" ? "checkmark.circle.fill" : "moon.fill")
+                    }
+                    Button {
+                        webAppearanceMode = "off"
+                    } label: {
+                        Label("网站原样", systemImage: webAppearanceMode == "off" ? "checkmark.circle.fill" : "sun.max")
+                    }
+                    Text("智能模式只在系统深色且网页背景偏亮时自动变暗；复杂网页可切回原样。")
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -174,17 +186,130 @@ struct BrowserView: View {
 
 private struct BrowserWebView: UIViewRepresentable {
     @ObservedObject var state: BrowserState
-    let forceDarkWebPages: Bool
+    let appearanceMode: String
     @Environment(\.colorScheme) private var colorScheme
 
+    // Inject at document start so sites with white backgrounds do not first paint an
+    // entirely white screen. The filter darkens light pages; images and videos are
+    // color-corrected separately. Avoid altering cookies or web navigation.
+    private static let adaptiveDarkScript = #"""
+    (() => {
+      if (window.__bgdlThemeInstalled) return;
+      window.__bgdlThemeInstalled = true;
+      const styleID = 'bgdl-adaptive-dark-css';
+      const style = document.createElement('style');
+      style.id = styleID;
+      style.textContent = `
+        html.bgdl-adaptive-dark {
+          filter: invert(1) hue-rotate(180deg) !important;
+          background: #fff !important;
+          color-scheme: light !important;
+        }
+        html.bgdl-adaptive-dark img,
+        html.bgdl-adaptive-dark video,
+        html.bgdl-adaptive-dark canvas,
+        html.bgdl-adaptive-dark svg {
+          filter: invert(1) hue-rotate(180deg) !important;
+        }
+      `;
+      const attachStyle = () => {
+        if (!style.isConnected && document.documentElement) {
+          (document.head || document.documentElement).appendChild(style);
+        }
+      };
+      let mode = 'auto';
+      let systemDark = false;
+      let pending = false;
+      let observing = false;
+      const brightness = (rgb) => {
+        const m = rgb && rgb.match(/rgba?\((\d+)[, ]+(\d+)[, ]+(\d+)(?:[, /]+([\d.]+))?\)/i);
+        if (!m) return null;
+        if (m[4] !== undefined && Number(m[4]) < 0.15) return null;
+        return 0.2126*Number(m[1]) + 0.7152*Number(m[2]) + 0.0722*Number(m[3]);
+      };
+      const effectiveBrightness = (node) => {
+        let el = node;
+        for (let n=0; el && n<12; n++,el=el.parentElement) {
+          if (!el || !(el instanceof Element)) continue;
+          const b = brightness(getComputedStyle(el).backgroundColor);
+          if (b !== null) return b;
+        }
+        return 255;
+      };
+      const pageLooksBright = () => {
+        if (!document.body) return false;
+        // Undo our filter before measuring original styles; the filter doesn't
+        // mutate computed background colors, but also avoid making the page dark
+        // twice while inspecting single-page-app navigations.
+        const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+        const samplePoints = [
+          [0.08,0.08],[0.50,0.08],[0.92,0.08],
+          [0.08,0.40],[0.50,0.40],[0.92,0.40],
+          [0.08,0.80],[0.50,0.80],[0.92,0.80]
+        ];
+        let bright=0, total=0;
+        for (const [x,y] of samplePoints) {
+          const el = document.elementFromPoint(Math.floor(w*x),Math.floor(h*y));
+          if (!el) continue;
+          total++;
+          if (effectiveBrightness(el) >= 165) bright++;
+        }
+        const root = effectiveBrightness(document.body);
+        return total > 0 ? bright >= Math.ceil(total * 0.55) : root >= 165;
+      };
+      const apply = () => {
+        pending = false;
+        attachStyle();
+        const shouldDarken = mode === 'always' ||
+          (mode === 'auto' && systemDark && pageLooksBright());
+        if (document.documentElement) {
+          document.documentElement.classList.toggle('bgdl-adaptive-dark',shouldDarken);
+        }
+      };
+      const schedule = () => {
+        if (pending) return;
+        pending = true;
+        setTimeout(apply, 80);
+      };
+      window.__bgdlSetTheme = (nextMode, dark) => {
+        mode = nextMode === 'always' || nextMode === 'off' ? nextMode : 'auto';
+        systemDark = !!dark;
+        schedule();
+      };
+      document.addEventListener('DOMContentLoaded', () => {
+        attachStyle(); schedule();
+        if (!observing && document.documentElement) {
+          observing = true;
+          let mutationTimer = null;
+          const observer = new MutationObserver(() => {
+            if (!systemDark && mode !== 'always') return;
+            if (mutationTimer) return;
+            mutationTimer = setTimeout(() => { mutationTimer = null; schedule(); }, 1200);
+          });
+          observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class']});
+        }
+      }, {once:true});
+      window.addEventListener('pageshow', schedule);
+      window.addEventListener('load', schedule);
+      attachStyle();
+    })();
+    """#
+
     func makeCoordinator() -> Coordinator {
-        Coordinator(state: state, forceDarkPages: forceDarkWebPages, systemDark: colorScheme == .dark)
+        Coordinator(state: state, appearanceMode: appearanceMode, systemDark: colorScheme == .dark)
     }
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let mode = ["auto", "always", "off"].contains(appearanceMode) ? appearanceMode : "auto"
+        let initialTheme = "window.__bgdlSetTheme && window.__bgdlSetTheme('\(mode)', \(colorScheme == .dark ? "true" : "false"));"
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: Self.adaptiveDarkScript + "\n" + initialTheme,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
         let browser = WKWebView(frame: .zero, configuration: configuration)
         browser.navigationDelegate = context.coordinator
         browser.uiDelegate = context.coordinator
@@ -201,7 +326,7 @@ private struct BrowserWebView: UIViewRepresentable {
     func updateUIView(_ browser: WKWebView, context: Context) {
         browser.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
         browser.underPageBackgroundColor = .systemBackground
-        context.coordinator.forceDarkPages = forceDarkWebPages
+        context.coordinator.appearanceMode = appearanceMode
         context.coordinator.systemDark = colorScheme == .dark
         context.coordinator.syncPageTheme(webView: browser)
     }
@@ -209,35 +334,22 @@ private struct BrowserWebView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private let state: BrowserState
-        var forceDarkPages: Bool
+        var appearanceMode: String
         var systemDark: Bool
+        private var lastAppearance = ""
 
-        init(state: BrowserState, forceDarkPages: Bool, systemDark: Bool) {
+        init(state: BrowserState, appearanceMode: String, systemDark: Bool) {
             self.state = state
-            self.forceDarkPages = forceDarkPages
+            self.appearanceMode = appearanceMode
             self.systemDark = systemDark
         }
 
-        func syncPageTheme(webView: WKWebView) {
-            // Websites implementing prefers-color-scheme are already handled by WebKit.
-            // Optional CSS fallback is explicitly enabled by the user; do not invert images.
-            let enabled = forceDarkPages && systemDark
-            let script = #"""
-            (() => {
-              const id = 'bgdl-optional-dark-style';
-              const old = document.getElementById(id);
-              if (!\#(enabled ? "true" : "false")) { if (old) old.remove(); return; }
-              if (old) return;
-              const tag = document.createElement('style');
-              tag.id = id;
-              tag.textContent = `
-                html { color-scheme: dark !important; background: #11151c !important; }
-                body { background: #11151c !important; color: #e9edf3 !important; }
-                input, textarea, select, button { color-scheme: dark !important; }
-              `;
-              (document.head || document.documentElement).appendChild(tag);
-            })();
-            """#
+        func syncPageTheme(webView: WKWebView, force: Bool = false) {
+            let signature = "\(appearanceMode)|\(systemDark)"
+            if !force && lastAppearance == signature { return }
+            lastAppearance = signature
+            let mode = ["auto","always","off"].contains(appearanceMode) ? appearanceMode : "auto"
+            let script = "window.__bgdlSetTheme && window.__bgdlSetTheme('\(mode)', \(systemDark ? "true" : "false"));"
             webView.evaluateJavaScript(script, completionHandler: nil)
         }
 
@@ -246,10 +358,11 @@ private struct BrowserWebView: UIViewRepresentable {
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             state.updateNavigation(webView)
-            syncPageTheme(webView: webView)
+            syncPageTheme(webView: webView, force: true)
         }
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             state.updateNavigation(webView)
+            syncPageTheme(webView: webView, force: true)
         }
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             state.updateNavigation(webView)
