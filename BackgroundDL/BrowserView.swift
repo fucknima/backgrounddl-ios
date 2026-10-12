@@ -66,7 +66,11 @@ struct BrowserView: View {
                 Button("前往", action: open)
                     .buttonStyle(.borderedProminent)
             }
-            .padding(10)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
 
             HStack(spacing: 20) {
                 Button { state.webView?.goBack() } label: {
@@ -87,6 +91,10 @@ struct BrowserView: View {
             }
             .padding(.horizontal, 17)
             .padding(.vertical, 10)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
 
             if !state.notice.isEmpty {
                 HStack {
@@ -105,13 +113,13 @@ struct BrowserView: View {
             ZStack {
                 BrowserWebView(state: state)
                 if state.webView?.url == nil && state.loadURL == nil {
-                    ContentUnavailableView("打开文件分享网页", systemImage: "globe",
-                        description: Text("粘贴 Google Drive 或其他 HTTPS 分享链接，打开网页后直接点击网站的下载按钮。可接管的下载会自动进入下载列表。"))
+                    ContentUnavailableView("打开分享网页", systemImage: "globe",
+                        description: Text("粘贴 HTTPS 分享地址，在网页上直接点击下载。成功接管的文件将交给系统后台下载。"))
                         .allowsHitTesting(false)
                 }
             }
         }
-        .navigationTitle("网页下载")
+        .navigationTitle("浏览器")
         .navigationBarTitleDisplayMode(.inline)
         .alert("下载提示", isPresented: $state.showMessage) {
             Button("确定", role: .cancel) { }

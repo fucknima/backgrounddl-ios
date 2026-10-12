@@ -4,89 +4,86 @@ struct ContentView: View {
     var body: some View {
         TabView {
             NavigationStack { BrowserView() }
-                .tabItem { Label("浏览器", systemImage: "globe") }
-            DownloadListView()
-                .tabItem { Label("下载", systemImage: "arrow.down.circle") }
+                .tabItem { Label("浏览器", systemImage: "safari") }
+            NavigationStack { DownloadListView() }
+                .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
         }
+        .tint(.cyan)
     }
 }
 
 private struct DownloadListView: View {
     @ObservedObject private var store = DownloadStore.shared
-    @StateObject private var drive = GoogleDriveService()
     @State private var link = ""
     @State private var isPreparing = false
     @State private var alertMessage = ""
     @State private var showAlert = false
 
     var body: some View {
-        NavigationStack {
-            Form {
+        ZStack {
+            LinearGradient(colors: [.blue.opacity(0.10), .cyan.opacity(0.06), .clear], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            List {
                 Section {
-                    TextField("备用：粘贴 HTTPS 直链或 Google Drive 文件链接", text: $link, axis: .vertical)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .lineLimit(2...4)
-                    Button {
-                        Task { await addDownload() }
-                    } label: {
-                        HStack {
-                            Label("开始后台下载", systemImage: "arrow.down.circle.fill")
-                            Spacer()
-                            if isPreparing { ProgressView() }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("备用直链")
+                            .font(.headline)
+                        TextField("备用：粘贴 HTTPS 直链", text: $link, axis: .vertical)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .lineLimit(2...4)
+                        Button {
+                            Task { await addDownload() }
+                        } label: {
+                            HStack {
+                                Label("开始后台下载", systemImage: "arrow.down.circle.fill")
+                                Spacer()
+                                if isPreparing { ProgressView() }
+                            }
                         }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isPreparing || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .disabled(isPreparing || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                } header: {
-                    Text("链接下载（备用方式）")
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.clear)
                 } footer: {
-                    Text("优先使用「浏览器」标签：打开分享网页，直接点击网页的下载按钮。此处保留直链/API 备用入口。")
-                }
-
-                Section("Google Drive 授权") {
-                    Text(drive.accountLabel)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    HStack {
-                        Button("登录 Google") {
-                            Task { await googleSignIn() }
-                        }
-                        Spacer()
-                        Button("退出") { drive.signOut() }
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("优先用“浏览器”：打开任意 HTTPS 分享网页，再点击网站自己的下载按钮。")
                 }
 
                 Section {
                     if store.items.isEmpty {
                         ContentUnavailableView("暂无下载任务", systemImage: "square.and.arrow.down",
-                                               description: Text("去「浏览器」打开分享链接，点击网页的下载按钮。"))
+                                               description: Text("去“浏览器”打开分享链接，点网页下载。"))
+                            .frame(maxWidth: .infinity)
+                            .listRowBackground(Color.clear)
                     }
                     ForEach(store.items) { item in
-                        DownloadRow(item: item, fileURL: store.fileURL(for: item),
+                        DownloadRow(item: item,
+                                    fileURL: store.fileURL(for: item),
                                     pause: { BackgroundDownloader.shared.changeState(id: item.id, action: .pause) },
                                     resume: { BackgroundDownloader.shared.changeState(id: item.id, action: .resume) },
                                     cancel: { BackgroundDownloader.shared.changeState(id: item.id, action: .cancel) },
                                     retry: { Task { await retry(item) } })
+                            .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14))
+                            .listRowBackground(Color.clear)
                     }
                 } header: {
                     Text("下载列表（\(store.items.count)）")
                 } footer: {
-                    Text("下载后的文件：文件 App → 在我的 iPhone 上 → 后台下载 → Downloads。")
+                    Text("文件位置：文件 App → 在我的 iPhone 上 → 后台下载 → Downloads。")
                 }
             }
-            .navigationTitle("后台下载")
-            .alert("提示", isPresented: $showAlert) {
-                Button("确定", role: .cancel) { }
-            } message: {
-                Text(alertMessage)
-            }
-            .task {
-                await drive.restore()
-                BackgroundDownloader.shared.reconnect()
-            }
+            .scrollContentBackground(.hidden)
+            .listStyle(.insetGrouped)
         }
+        .navigationTitle("下载")
+        .alert("提示", isPresented: $showAlert) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
+        }
+        .task { BackgroundDownloader.shared.reconnect() }
     }
 
     @MainActor
@@ -95,38 +92,31 @@ private struct DownloadListView: View {
         guard !raw.isEmpty else { return }
         isPreparing = true
         defer { isPreparing = false }
-        do {
-            let prepared = try await drive.prepare(raw)
-            BackgroundDownloader.shared.enqueue(request: prepared.request, originalURL: raw,
-                                                 name: prepared.name, source: prepared.source)
-            link = ""
-        } catch {
-            show(error)
+        guard let url = URL(string: raw), url.scheme?.lowercased() == "https", url.host != nil else {
+            show(DownloadError.invalidLink)
+            return
         }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 60
+        let basename = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+        let name = basename.isEmpty || basename == "/" ? "下载文件_\(UUID().uuidString.prefix(8))" : basename
+        BackgroundDownloader.shared.enqueue(request: request, originalURL: raw, name: name, source: .direct)
+        link = ""
     }
 
     @MainActor
     private func retry(_ item: DownloadItem) async {
-        guard !isPreparing else { return }
-        isPreparing = true
-        defer { isPreparing = false }
-        do {
-            if item.source == .browser {
-                show(DownloadError.unsupportedLink("网页登录下载可能带有短期 Cookie/令牌。请返回「浏览器」重新点击网站的下载按钮。"))
-                return
-            }
-            // 重新请求 Google Token，避免旧授权头过期。
-            let prepared = try await drive.prepare(item.originalURL)
-            BackgroundDownloader.shared.enqueue(request: prepared.request,
-                                                 originalURL: item.originalURL,
-                                                 name: prepared.name, source: prepared.source)
-        } catch { show(error) }
-    }
-
-    @MainActor
-    private func googleSignIn() async {
-        do { try await drive.signIn() }
-        catch { show(error) }
+        if item.source == .browser {
+            show(DownloadError.unsupportedLink("网页登录下载通常依赖临时 Cookie/令牌。请返回浏览器页面重新点击下载按钮。"))
+            return
+        }
+        guard let url = URL(string: item.originalURL), url.scheme?.lowercased() == "https", url.host != nil else {
+            show(DownloadError.invalidLink)
+            return
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 60
+        BackgroundDownloader.shared.enqueue(request: request, originalURL: item.originalURL, name: item.filename, source: .direct)
     }
 
     private func show(_ error: Error) {
@@ -144,34 +134,47 @@ private struct DownloadRow: View {
     let retry: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(item.filename)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(2)
-                .textSelection(.enabled)
-            HStack {
-                Text(statusText)
-                    .font(.caption)
-                    .foregroundStyle(item.status == .failed ? Color.red : Color.secondary)
-                Spacer()
-                if let progress = item.fraction, item.status == .running {
-                    Text("\(Int(progress * 100))%")
-                        .monospacedDigit().font(.caption)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "arrow.down.doc.fill")
+                    .font(.title3)
+                    .foregroundStyle(item.status == .completed ? .green : .blue)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.filename)
+                        .font(.headline)
+                        .lineLimit(2)
+                    HStack(spacing: 8) {
+                        Text(item.sourceLabel)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.thinMaterial, in: Capsule())
+                        Text(statusText)
+                            .font(.caption)
+                            .foregroundStyle(item.status == .failed ? .red : .secondary)
+                        Spacer()
+                        if let progress = item.fraction, item.status == .running {
+                            Text("\(Int(progress * 100))%")
+                                .monospacedDigit()
+                                .font(.caption.weight(.medium))
+                        }
+                    }
                 }
             }
-            if item.status == .running {
-                if let progress = item.fraction {
-                    ProgressView(value: progress)
-                } else {
-                    ProgressView()
+            if item.status == .running || item.status == .paused {
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: item.fraction ?? 0)
+                    Text("\(item.downloadedBytes.readableSize) / \(item.totalBytes.readableSize)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                Text("\(item.downloadedBytes.readableSize) / \(item.totalBytes.readableSize)")
-                    .font(.caption2).foregroundStyle(.secondary)
             }
             if let error = item.errorMessage, item.status == .failed {
-                Text(error).font(.caption2).foregroundStyle(.red)
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
             }
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
                 switch item.status {
                 case .running:
                     Button("暂停", action: pause)
@@ -192,16 +195,21 @@ private struct DownloadRow: View {
             .buttonStyle(.borderless)
             .font(.caption)
         }
-        .padding(.vertical, 5)
+        .padding(14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.2))
+        }
     }
 
     private var statusText: String {
         switch item.status {
-        case .running: "下载中"
-        case .paused: "已暂停"
-        case .completed: "已完成"
-        case .failed: "下载失败"
-        case .cancelled: "已取消"
+        case .running: return "下载中"
+        case .paused: return "已暂停"
+        case .completed: return "已完成"
+        case .failed: return "下载失败"
+        case .cancelled: return "已取消"
         }
     }
 }

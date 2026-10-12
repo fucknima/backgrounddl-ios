@@ -1,31 +1,34 @@
-# BackgroundDL — 网页分享链接后台下载器
+# 后台下载 BackgroundDL — 浏览器 + 灵动岛版
 
-## 这版主要解决什么问题
+## 功能
 
-不要求用户寻找文件直链。打开 App 的「浏览器」，粘贴别人分享的 HTTPS 网页链接（例如 Google Drive 分享页），在网页内点击原站的「下载」，App 尝试从 WebKit 导航 / Content-Disposition 响应识别文件下载，并转交给原生的 **background URLSession downloadTask**；随后可以切换 App 或锁屏。
+- 内置 WKWebView 打开普通 HTTPS 分享网页；网页登录、网页按钮与下载响应由原生 App 处理。
+- 可接管的 HTTPS GET 下载交由后台 URLSession 下载；切到其他应用和锁屏时，系统可继续传输。
+- 支持暂停、继续（依赖服务器允许恢复下载及有效 resumeData）、取消、重试、断电重开后后台任务关联。
+- 支持多个下载任务，写入本机 `Documents/Downloads`，可从「文件」App 访问。
+- 下载期间可创建一条 Live Activity：锁屏显示进度；支持灵动岛紧凑、最小及展开视图。
+- 提供自制 App 图标，SwiftUI 原生玻璃材质、圆角控件，使用新 Xcode SDK 获得新系统原生外观。
 
-## 界面
+## 限制（重要）
 
-- **浏览器**：地址栏、网页、返回/前进/刷新。下载按钮若被 WebKit 识别为文件下载，App 会取消网页下载并新建后台下载任务。
-- **下载**：进度、暂停、继续、取消、分享/保存；仍保留直链和 Google Drive API 备用入口。
-- 默认文件保存位置：iPhone「文件」→「在我的 iPhone 上」→「后台下载」→ `Downloads`。
+1. 背景 URLSession 的传输与 Live Activity 刷新是**不同机制**。iOS 挂起 App 后，即使下载继续，系统不承诺持续唤醒 App 提供每一段字节的回调，因此灵动岛进度可能暂时保持上次值，完成后系统唤醒时才更新。
+2. WebKit 可以接管的普通下载请求才可以交给 URLSession。`blob:`、`data:`、页面 JS 生成文件、POST 等流程不保证可转移；登录 Cookie、限时下载令牌、服务器反爬或续传限制可能导致失败。
+3. 手动从多任务界面强制关闭 App 后，iOS 通常会取消后台 URLSession 的传输。
+4. `resumeData` 并不保证每个服务器都能断点续传。服务器不支持 Range、token 过期、文件变化时只能重新下载。
+5. 公开仓库**不要提交账号密码、Cookie、分享令牌或签名证书**。
 
-## Google Drive 和站点限制（务必阅读）
+## 构建
 
-1. 公开可访问、服务器发出 **HTTP/HTTPS GET 文件响应** 的分享下载更容易接管。站点 Cookie 只从 App 自己的 WKWebView 获取、按对应请求域名匹配后传给 URLSession。**Safari 内已登录的 Cookie 不会自动共享**。
-2. Google 可能禁止用户在嵌入式 WKWebView 内登录（`disallowed_useragent`）。这是 Google 的安全政策，不应通过伪造浏览器 UA 或窃取 Safari Cookie 绕过。访问需要登录的私有文件，请使用合法 Google OAuth 授权后的 API 备用入口（需自己在 Google Cloud 配置 iOS Client ID 和允许的 scope）；此功能与「直接在网页点击」互补。
-3. `blob:` / `data:`、动态 JS 内存文件、页面内部 `fetch`、POST 表单、一次性且绑定浏览器会话的 URL、需要进一步确认的 Google 大文件下载，**不能保证成功转移**到后台 URLSession。页面仍可能需要先点击「继续下载」等确认按钮。浏览器无法接管时会明确提示，不会声称下载成功。
-4. 后台 URLSession 受 iOS 网络与电量调度限制；**从多任务界面强制关闭 App** 可能取消当前后台任务。暂停/继续仅暂停当前系统任务，不等于断点续传；系统任务丢失需重新点击网页下载。
-5. 对网页下载返回的 HTML 登录页/确认页，程序会提示失败，避免把网页当成下载文件保存。
+在 GitHub Actions 的 Build BackgroundDL iOS IPA 中下载 `BackgroundDL-unsigned` Artifacts；其中是未签名 IPA，需自行签名后安装。
+工作流使用 GitHub `xcode-27` public preview runner（可用性由 GitHub 决定）。
 
-## 编译
+## 使用
 
-仓库 `main` 上每次推送自动执行 GitHub Actions `Build unsigned iOS IPA`，在 macOS 运行 `xcodebuild ... CODE_SIGNING_ALLOWED=NO`，把 `BackgroundDL.app` 打包为 `BackgroundDL-unsigned.ipa` 并上传至 Actions Artifacts。下载后仍需使用自己的有效签名证书签名才能安装。
+1. 打开「浏览器」，在地址栏粘贴 HTTPS 分享页面；必要时在网页中登录。
+2. 点击网页的「下载」。可接管任务进入下载列表。
+3. 返回「下载」查看任务进度，切出 App 或锁屏。
+4. 打开 iOS 设置，允许本 App 的实时活动。带灵动岛设备会显示紧凑进度。文件 App → 在我的 iPhone 上 → 后台下载 → Downloads。
 
-### 可选 Google Drive API 配置
+## 验证计划
 
-仓库 Actions Secrets 可配置：`GOOGLE_CLIENT_ID`、`GOOGLE_URL_SCHEME`（反向 Client ID）。未配置时，**网页下载和普通 HTTP(S) 直链下载无需此配置**；Google Drive API 备用入口不具备 Google 登录权限。不要将私密凭据写入公开源码仓库。
-
-## 隐私
-
-分享链接可能包含临时令牌；公开日志和 Issue 不要粘贴带密钥的下载地址。此 App 不需要云端代理服务器。浏览器 Cookie 仅在下载被用户点击触发时用于对应目标站点，跨站点跳转会移除敏感请求头。
+实际 Xcode 编译通过不等于真机网络场景都已通过。应分别测试 10GB+ HTTP Range 服务器、下载中锁屏、Wi-Fi→蜂窝网络切换、恢复下载、签名 URL 过期、低存储空间和后台完成后唤醒 App。

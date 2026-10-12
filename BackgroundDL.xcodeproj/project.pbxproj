@@ -4,27 +4,49 @@
 	classes = {};
 	objectVersion = 56;
 	objects = {
+/* Begin PBXContainerItemProxy section */
+        7B266374E36A7AF389C5784C /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */; proxyType = 1; remoteGlobalIDString = 08D3C4123697F545CB505007; remoteInfo = BackgroundDLLiveActivityExtension; };
+/* End PBXContainerItemProxy section */
+/* Begin PBXTargetDependency section */
+        920E0FAF4E1AEA36F099CAED /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 08D3C4123697F545CB505007 /* BackgroundDLLiveActivityExtension */; targetProxy = 7B266374E36A7AF389C5784C /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+/* Begin PBXCopyFilesBuildPhase section */
+        7AC3D671F9DA92ECEF78726B /* Embed App Extensions */ = {
+            isa = PBXCopyFilesBuildPhase;
+            buildActionMask = 2147483647;
+            dstPath = "";
+            dstSubfolderSpec = 13;
+            files = (38C985078B229EF819B0A7E4 /* BackgroundDLLiveActivityExtension.appex in Embed App Extensions */,);
+            name = "Embed App Extensions";
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+/* End PBXCopyFilesBuildPhase section */
 /* Begin PBXBuildFile section */
+        69E71F8DE03362F5A5CEC3FA /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */; };
+        5EE70396164BFBE5417B1964 /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */; };
+        FBCDB3A3AE29906F4880884B /* DownloadLiveWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F933A911D2BFAE2D3FF3C18 /* DownloadLiveWidget.swift */; };
+        38C985078B229EF819B0A7E4 /* BackgroundDLLiveActivityExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 85081FCD883692A6978EED0B /* BackgroundDLLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+        3161D75259A524F88238F975 /* DownloadActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A7F8B7826CCE21CD2F00D /* DownloadActivityManager.swift */; };
         4F70A7C1B9004C13B6181990 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F70A7C1B9004C13B6181991 /* BrowserView.swift */; };
 		D9E8D39A12BC275A2BF7EEDE /* BackgroundDLApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */; };
 		82FDB5029E6F8623BBAF7240 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E0F96C682DC1558B12A4D3 /* ContentView.swift */; };
 		7FCA99F642FA2B3B5E5281AC /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22586ABB49CABC9DB8DB398 /* Models.swift */; };
 		E26B94345204CC4053130BDD /* DownloadStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64706E02A8AE6FFB54588D8 /* DownloadStore.swift */; };
 		F14092C66B0D9CBA53ADC684 /* BackgroundDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B91DDE9D7CF98E61B5264FE /* BackgroundDownloader.swift */; };
-		FAFD4F791757B4C315260BD4 /* GoogleDriveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E979D92830F6FAC59B2ABA6 /* GoogleDriveService.swift */; };
-		11F3B1AF6A968770F6B0A945 /* DriveLinkParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD4C76256D59F9ECCB447711 /* DriveLinkParser.swift */; };
 		DB249DB9D0FF833647E29581 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 93FE83C6D4F6B073FBE750AE /* Assets.xcassets */; };
-		742EB8FBFD0FB8C001CA2C59 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 5673B656D59A3575A41B83D2 /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
+        C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadActivityAttributes.swift; sourceTree = "<group>"; };
+        2A0A7F8B7826CCE21CD2F00D /* DownloadActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadActivityManager.swift; sourceTree = "<group>"; };
+        7F933A911D2BFAE2D3FF3C18 /* DownloadLiveWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadLiveWidget.swift; sourceTree = "<group>"; };
+        B8E7CB23DADEF1D214F21F03 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+        85081FCD883692A6978EED0B /* BackgroundDLLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BackgroundDLLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
         4F70A7C1B9004C13B6181991 /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDLApp.swift; sourceTree = "<group>"; };
 		48E0F96C682DC1558B12A4D3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C22586ABB49CABC9DB8DB398 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		B64706E02A8AE6FFB54588D8 /* DownloadStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadStore.swift; sourceTree = "<group>"; };
 		6B91DDE9D7CF98E61B5264FE /* BackgroundDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDownloader.swift; sourceTree = "<group>"; };
-		8E979D92830F6FAC59B2ABA6 /* GoogleDriveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveService.swift; sourceTree = "<group>"; };
-		FD4C76256D59F9ECCB447711 /* DriveLinkParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveLinkParser.swift; sourceTree = "<group>"; };
 		93FE83C6D4F6B073FBE750AE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		17089704BF5954E6B87ED25A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		84337AD8D27FCD69AF2C4FC2 /* BackgroundDL.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BackgroundDL.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -33,38 +55,52 @@
 		424153ED3CD079DB4DB459AF /* Frameworks */ = {
             isa = PBXFrameworksBuildPhase;
             buildActionMask = 2147483647;
-            files = (742EB8FBFD0FB8C001CA2C59 /* GoogleSignIn in Frameworks */,);
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXFrameworksBuildPhase section */
 /* Begin PBXGroup section */
+        0FBDA3E3E6F668BE613E507F /* BackgroundDLLiveActivity */ = {
+            isa = PBXGroup;
+            children = (7F933A911D2BFAE2D3FF3C18 /* DownloadLiveWidget.swift */, B8E7CB23DADEF1D214F21F03 /* Info.plist */,);
+            path = BackgroundDLLiveActivity;
+            sourceTree = "<group>";
+        };
 		63A9F0EA7BB98050796B649E = {
             isa = PBXGroup;
-            children = (CF3F3E8EE8BB771CB8A76EAD /* BackgroundDL */, 132451F1DAF5AA62295B939F /* Products */,);
+            children = (CF3F3E8EE8BB771CB8A76EAD /* BackgroundDL */, 0FBDA3E3E6F668BE613E507F /* BackgroundDLLiveActivity */, 132451F1DAF5AA62295B939F /* Products */,);
             sourceTree = "<group>";
         };
 		CF3F3E8EE8BB771CB8A76EAD /* BackgroundDL */ = {
             isa = PBXGroup;
-            children = (00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */, 48E0F96C682DC1558B12A4D3 /* ContentView.swift */, 4F70A7C1B9004C13B6181991 /* BrowserView.swift */, C22586ABB49CABC9DB8DB398 /* Models.swift */, B64706E02A8AE6FFB54588D8 /* DownloadStore.swift */, 6B91DDE9D7CF98E61B5264FE /* BackgroundDownloader.swift */, 8E979D92830F6FAC59B2ABA6 /* GoogleDriveService.swift */, FD4C76256D59F9ECCB447711 /* DriveLinkParser.swift */, 93FE83C6D4F6B073FBE750AE /* Assets.xcassets */, 17089704BF5954E6B87ED25A /* Info.plist */, );
             path = BackgroundDL;
             sourceTree = "<group>";
         };
 		132451F1DAF5AA62295B939F /* Products */ = {
             isa = PBXGroup;
-            children = (84337AD8D27FCD69AF2C4FC2 /* BackgroundDL.app */,);
+            children = (84337AD8D27FCD69AF2C4FC2 /* BackgroundDL.app */, 85081FCD883692A6978EED0B /* BackgroundDLLiveActivityExtension.appex */,);
             name = Products;
             sourceTree = "<group>";
         };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
+        08D3C4123697F545CB505007 /* BackgroundDLLiveActivityExtension */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = B916DFCFE53E9CEDFB3E6200 /* Build configuration list for PBXNativeTarget "BackgroundDLLiveActivityExtension" */;
+            buildPhases = (9156AD8F53AEB5DC87228BA9 /* Sources */, F7CEDA32720E9C57F0D8E3B1 /* Resources */,);
+            buildRules = ();
+            dependencies = ();
+            name = BackgroundDLLiveActivityExtension;
+            productName = BackgroundDLLiveActivityExtension;
+            productReference = 85081FCD883692A6978EED0B /* BackgroundDLLiveActivityExtension.appex */;
+            productType = "com.apple.product-type.app-extension";
+        };
 		42AEFBAE01D2DFD981F7DA7D /* BackgroundDL */ = {
             isa = PBXNativeTarget;
             buildConfigurationList = 354589B28580510B6EC24620 /* Build configuration list for PBXNativeTarget "BackgroundDL" */;
-            buildPhases = (EE131AE163B681F0331319F3 /* Sources */, 424153ED3CD079DB4DB459AF /* Frameworks */, 285BB1C1430063331E9F5DD0 /* Resources */,);
+            buildPhases = (EE131AE163B681F0331319F3 /* Sources */, 424153ED3CD079DB4DB459AF /* Frameworks */, 285BB1C1430063331E9F5DD0 /* Resources */, 7AC3D671F9DA92ECEF78726B /* Embed App Extensions */,);
             buildRules = ();
-            dependencies = ();
+            dependencies = (920E0FAF4E1AEA36F099CAED /* PBXTargetDependency */,);
             name = BackgroundDL;
-            packageProductDependencies = (5673B656D59A3575A41B83D2 /* GoogleSignIn */,);
             productName = BackgroundDL;
             productReference = 84337AD8D27FCD69AF2C4FC2 /* BackgroundDL.app */;
             productType = "com.apple.product-type.application";
@@ -76,7 +112,7 @@
             attributes = {
                 BuildIndependentTargetsInParallel = 1;
                 LastUpgradeCheck = 1600;
-                TargetAttributes = { 42AEFBAE01D2DFD981F7DA7D = { CreatedOnToolsVersion = 15.0; }; };
+                TargetAttributes = { 42AEFBAE01D2DFD981F7DA7D = { CreatedOnToolsVersion = 15.0; }; 08D3C4123697F545CB505007 = { CreatedOnToolsVersion = 15.0; }; };
             };
             buildConfigurationList = 1F4E3D13C2320EDA50221924 /* Build configuration list for PBXProject "BackgroundDL" */;
             compatibilityVersion = "Xcode 14.0";
@@ -84,14 +120,15 @@
             hasScannedForEncodings = 0;
             knownRegions = (zh_CN, en, Base,);
             mainGroup = 63A9F0EA7BB98050796B649E;
-            packageReferences = (BDC60F65E380D453E5A6C37B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,);
+            packageReferences = ();
             productRefGroup = 132451F1DAF5AA62295B939F;
             projectDirPath = "";
             projectRoot = "";
-            targets = (42AEFBAE01D2DFD981F7DA7D /* BackgroundDL */,);
+            targets = (42AEFBAE01D2DFD981F7DA7D /* BackgroundDL */, 08D3C4123697F545CB505007 /* BackgroundDLLiveActivityExtension */,);
         };
 /* End PBXProject section */
 /* Begin PBXResourcesBuildPhase section */
+        F7CEDA32720E9C57F0D8E3B1 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		285BB1C1430063331E9F5DD0 /* Resources */ = {
             isa = PBXResourcesBuildPhase;
             buildActionMask = 2147483647;
@@ -100,33 +137,31 @@
         };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
+        9156AD8F53AEB5DC87228BA9 /* Sources */ = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (5EE70396164BFBE5417B1964 /* DownloadActivityAttributes.swift in Sources */, FBCDB3A3AE29906F4880884B /* DownloadLiveWidget.swift in Sources */,);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
 		EE131AE163B681F0331319F3 /* Sources */ = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (D9E8D39A12BC275A2BF7EEDE /* BackgroundDLApp.swift in Sources */, 82FDB5029E6F8623BBAF7240 /* ContentView.swift in Sources */, 4F70A7C1B9004C13B6181990 /* BrowserView.swift in Sources */, 7FCA99F642FA2B3B5E5281AC /* Models.swift in Sources */, E26B94345204CC4053130BDD /* DownloadStore.swift in Sources */, F14092C66B0D9CBA53ADC684 /* BackgroundDownloader.swift in Sources */, FAFD4F791757B4C315260BD4 /* GoogleDriveService.swift in Sources */, 11F3B1AF6A968770F6B0A945 /* DriveLinkParser.swift in Sources */,);
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXSourcesBuildPhase section */
 /* Begin XCBuildConfiguration section */
+        08419263F84A10D9B4D54DD4 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 2; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLLiveActivity/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.1; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+        92BBEF5394AA0BA40BE11C2D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 2; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLLiveActivity/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.1; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
 		3BA1C82542E6F3B3503A9FB5 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; GCC_C_LANGUAGE_STANDARD = gnu17; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
 		85B903815B3C81A249BFFE93 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; GCC_C_LANGUAGE_STANDARD = gnu17; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
 		747623A7BD2A51E667E5A76D /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDL/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
 		03F2D9C68906FCD933ACAFCF /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDL/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
+        B916DFCFE53E9CEDFB3E6200 /* Build configuration list for PBXNativeTarget "BackgroundDLLiveActivityExtension" */ = {isa = XCConfigurationList; buildConfigurations = (08419263F84A10D9B4D54DD4 /* Debug */, 92BBEF5394AA0BA40BE11C2D /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		1F4E3D13C2320EDA50221924 /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (3BA1C82542E6F3B3503A9FB5, 85B903815B3C81A249BFFE93,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		354589B28580510B6EC24620 /* Build configuration list for PBXNativeTarget */ = {isa = XCConfigurationList; buildConfigurations = (747623A7BD2A51E667E5A76D, 03F2D9C68906FCD933ACAFCF,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
-/* Begin XCRemoteSwiftPackageReference section */
-		BDC60F65E380D453E5A6C37B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
-            isa = XCRemoteSwiftPackageReference;
-            repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
-            requirement = {kind = upToNextMajorVersion; minimumVersion = 9.0.0; };
-        };
-/* End XCRemoteSwiftPackageReference section */
-/* Begin XCSwiftPackageProductDependency section */
-		5673B656D59A3575A41B83D2 /* GoogleSignIn */ = {isa = XCSwiftPackageProductDependency; package = BDC60F65E380D453E5A6C37B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */; productName = GoogleSignIn; };
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
 }

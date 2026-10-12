@@ -1,5 +1,4 @@
 import SwiftUI
-import GoogleSignIn
 import UIKit
 
 final class DownloaderAppDelegate: NSObject, UIApplicationDelegate {
@@ -7,7 +6,6 @@ final class DownloaderAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        // 即使系统只为传递后台事件而启动进程，也要重建 URLSession。
         _ = BackgroundDownloader.shared
         BackgroundDownloader.shared.reconnect()
         return true
@@ -32,9 +30,6 @@ struct BackgroundDLApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .onOpenURL { url in
-                    _ = GIDSignIn.sharedInstance.handle(url)
-                }
         }
     }
 }

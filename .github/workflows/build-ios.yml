@@ -1,48 +1,42 @@
-name: Build unsigned iOS IPA
+name: Build BackgroundDL iOS IPA
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Select Xcode
+      - name: Inspect Xcode project
         run: |
           xcodebuild -version
           xcodebuild -list -project BackgroundDL.xcodeproj
-
-      - name: Inject optional Google OAuth settings
-        env:
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_URL_SCHEME: ${{ secrets.GOOGLE_URL_SCHEME }}
-        shell: bash
-        run: |
-          if [[ -n "$GOOGLE_CLIENT_ID" && -n "$GOOGLE_URL_SCHEME" ]]; then
-            /usr/libexec/PlistBuddy -c "Set :GIDClientID $GOOGLE_CLIENT_ID" BackgroundDL/Info.plist
-            /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $GOOGLE_URL_SCHEME" BackgroundDL/Info.plist
-          else
-            echo "Google OAuth secrets not configured; HTTPS direct downloads work, Drive sign-in will not."
-          fi
-
+          plutil -lint BackgroundDL.xcodeproj/project.pbxproj BackgroundDL/Info.plist BackgroundDLLiveActivity/Info.plist
       - name: Build without code signing
         shell: bash
         run: |
           set -euo pipefail
           xcodebuild -project BackgroundDL.xcodeproj \
             -scheme BackgroundDL -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath "$PWD/.derivedData" \
             CODE_SIGNING_ALLOWED=NO build
+          APP="$PWD/.derivedData/Build/Products/Release-iphoneos/BackgroundDL.app"
+          test -d "$APP"
+          test -d "$APP/PlugIns/BackgroundDLLiveActivityExtension.appex"
+          test -f "$APP/PlugIns/BackgroundDLLiveActivityExtension.appex/BackgroundDLLiveActivityExtension"
           mkdir -p Payload
-          cp -R .derivedData/Build/Products/Release-iphoneos/BackgroundDL.app Payload/
+          cp -R "$APP" Payload/
           zip -qr BackgroundDL-unsigned.ipa Payload
-
-      - name: Upload unsigned IPA
+          unzip -tqq BackgroundDL-unsigned.ipa
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: BackgroundDL-unsigned

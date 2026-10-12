@@ -5,13 +5,17 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
     static let shared = BackgroundDownloader()
     static let sessionIdentifier = "com.example.backgrounddl.transfers"
 
-    // 系统后台传输需要使用 downloadTask（不能用 dataTask）。
     private lazy var session: URLSession = {
         let settings = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         settings.sessionSendsLaunchEvents = true
-        settings.isDiscretionary = false  // 尽量尽快开始；iOS 仍可自行调度
+        settings.isDiscretionary = false
         settings.allowsCellularAccess = true
+        settings.allowsExpensiveNetworkAccess = true
+        settings.allowsConstrainedNetworkAccess = true
+        settings.waitsForConnectivity = true
+        settings.timeoutIntervalForRequest = 120
         settings.timeoutIntervalForResource = 60 * 60 * 24 * 7
+        settings.httpMaximumConnectionsPerHost = 2
         return URLSession(configuration: settings, delegate: self, delegateQueue: nil)
     }()
 
@@ -22,7 +26,7 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
         let item = DownloadItem(
             id: UUID(), originalURL: originalURL, filename: name, source: source,
             status: .running, downloadedBytes: 0, totalBytes: -1,
-            errorMessage: nil, savedFilename: nil, createdAt: Date()
+            errorMessage: nil, savedFilename: nil, createdAt: Date(), resumeDataBase64: nil
         )
         DownloadStore.shared.add(item)
         let task = session.downloadTask(with: request)
@@ -30,7 +34,6 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
         task.resume()
     }
 
-    // 恢复后台会话的关联。进程被系统回收时，iOS 可能重新唤醒 App。
     func reconnect() {
         session.getAllTasks { tasks in
             let pairs = tasks.compactMap { task -> (UUID, Bool)? in
@@ -49,41 +52,56 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
         session.getAllTasks { tasks in
             guard let task = tasks.first(where: { TaskMarker.decode($0.taskDescription)?.id == id }) else {
                 Task { @MainActor in
-                    DownloadStore.shared.update(id, status: .failed, message: "找不到原任务，请使用重试。")
+                    if action == .resume, let resumeData = DownloadStore.shared.resumeData(for: id) {
+                        self.resumeWithResumeData(id: id, data: resumeData)
+                    } else {
+                        DownloadStore.shared.update(id, status: .failed, message: "找不到原任务，请使用重试。")
+                    }
                 }
                 return
             }
             switch action {
             case .pause:
-                task.suspend()
+                if let downloadTask = task as? URLSessionDownloadTask {
+                    downloadTask.cancel(byProducingResumeData: { resumeData in
+                        Task { @MainActor in
+                            DownloadStore.shared.setResumeData(id, data: resumeData)
+                            DownloadStore.shared.update(id, status: .paused,
+                                message: resumeData == nil ? "此服务器未提供断点数据；继续时可能需要重新下载。" : nil)
+                        }
+                    })
+                } else {
+                    task.suspend()
+                    Task { @MainActor in
+                        DownloadStore.shared.update(id, status: .paused)
+                    }
+                }
             case .resume:
-                task.resume()
+                Task { @MainActor in
+                    if let resumeData = DownloadStore.shared.resumeData(for: id) {
+                        self.resumeWithResumeData(id: id, data: resumeData)
+                    } else {
+                        task.resume()
+                        DownloadStore.shared.update(id, status: .running)
+                    }
+                }
             case .cancel:
                 task.cancel()
-            }
-            Task { @MainActor in
-                let newState: DownloadStatus = switch action {
-                case .pause: .paused
-                case .resume: .running
-                case .cancel: .cancelled
+                Task { @MainActor in
+                    DownloadStore.shared.setResumeData(id, data: nil)
+                    DownloadStore.shared.update(id, status: .cancelled)
                 }
-                DownloadStore.shared.update(id, status: newState)
             }
         }
     }
 
-    // 跨域跳转不携带原网站的 Cookie 或 Authorization，避免泄漏登录会话。
-    func urlSession(_ session: URLSession, task: URLSessionTask,
-                    willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest,
-                    completionHandler: @escaping (URLRequest?) -> Void) {
-        var safe = request
-        if response.url?.host?.lowercased() != request.url?.host?.lowercased() {
-            safe.setValue(nil, forHTTPHeaderField: "Cookie")
-            safe.setValue(nil, forHTTPHeaderField: "Authorization")
-            safe.setValue(nil, forHTTPHeaderField: "Referer")
-        }
-        completionHandler(safe)
+    @MainActor
+    private func resumeWithResumeData(id: UUID, data: Data) {
+        guard let item = DownloadStore.shared.items.first(where: { $0.id == id }) else { return }
+        let task = session.downloadTask(withResumeData: data)
+        task.taskDescription = TaskMarker(id: item.id, filename: item.filename, source: item.source).text
+        task.resume()
+        DownloadStore.shared.update(id, status: .running)
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
@@ -96,7 +114,6 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    // 临时文件只在此回调期间有效；必须立即移动，而不是异步保存。
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
         guard let marker = TaskMarker.decode(downloadTask.taskDescription) else { return }
@@ -104,38 +121,29 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
            !(200...299).contains(response.statusCode) {
             let code = response.statusCode
             Task { @MainActor in
-                let hint = code == 401 ? "登录凭据可能过期，请点重试" :
+                let hint = code == 401 ? "登录凭据可能过期，请返回网页重新点下载" :
                            code == 403 ? "没有权限或下载受限" :
                            code == 404 ? "文件不存在或无权访问" : "请检查链接和网络"
-                DownloadStore.shared.update(marker.id, status: .failed,
-                    message: "HTTP \(code)：\(hint)")
+                DownloadStore.shared.update(marker.id, status: .failed, message: "HTTP \(code)：\(hint)")
             }
             return
         }
-        // 防止分享页/登录页/Google Drive 病毒扫描确认页被误存为“下载成功”。
-        if marker.source == .browser,
-           let response = downloadTask.response as? HTTPURLResponse,
+        if let response = downloadTask.response as? HTTPURLResponse,
            let mime = response.mimeType?.lowercased(),
            (mime == "text/html" || mime == "application/xhtml+xml"),
            !(response.value(forHTTPHeaderField: "Content-Disposition") ?? "").lowercased().contains("attachment") {
             Task { @MainActor in
                 DownloadStore.shared.update(marker.id, status: .failed,
-                    message: "服务器返回网页而不是文件（可能需要登录、确认大文件或链接过期）。请返回浏览器处理提示后重新点下载。")
+                    message: "服务器返回网页而不是文件（可能需要登录、确认大文件或链接过期）。")
             }
             return
         }
         do {
             let directory = DownloadStore.downloadFolder
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try? FileManager.default.setAttributes(
-                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-                ofItemAtPath: directory.path)
+            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: directory.path)
             var candidate = marker.filename
-            // 直链如果 URL 文件名泛泛，优先用服务器告知的文件名。
-            if (marker.source == .direct || marker.source == .browser),
-               (candidate == "download" || candidate == "file" || candidate.hasPrefix("下载文件_") || marker.source == .browser),
-               let suggested = downloadTask.response?.suggestedFilename,
-               suggested != "download", !suggested.isEmpty {
+            if let suggested = downloadTask.response?.suggestedFilename, !suggested.isEmpty, suggested != "download" {
                 candidate = suggested
             }
             candidate = Self.safeFilename(candidate)
@@ -149,17 +157,13 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
                 n += 1
             }
             try FileManager.default.moveItem(at: location, to: destination)
-            try? FileManager.default.setAttributes(
-                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-                ofItemAtPath: destination.path)
+            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
             Task { @MainActor in
-                DownloadStore.shared.update(marker.id, status: .completed,
-                                            savedFilename: destination.lastPathComponent)
+                DownloadStore.shared.update(marker.id, status: .completed, savedFilename: destination.lastPathComponent)
             }
         } catch {
             Task { @MainActor in
-                DownloadStore.shared.update(marker.id, status: .failed,
-                    message: "保存失败：\(error.localizedDescription)")
+                DownloadStore.shared.update(marker.id, status: .failed, message: "保存失败：\(error.localizedDescription)")
             }
         }
     }
@@ -167,14 +171,40 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     didCompleteWithError error: Error?) {
         guard let error, let marker = TaskMarker.decode(task.taskDescription) else { return }
+        let ns = error as NSError
+        if ns.code == NSURLErrorCancelled { return }
+        let resumeData = ns.userInfo["NSURLSessionDownloadTaskResumeData"] as? Data
         Task { @MainActor in
             let existing = DownloadStore.shared.items.first { $0.id == marker.id }
             guard let existing, existing.status != .cancelled,
                   existing.status != .paused, existing.status != .completed,
                   existing.status != .failed else { return }
-            DownloadStore.shared.update(marker.id, status: .failed,
-                                        message: error.localizedDescription)
+            if let resumeData {
+                DownloadStore.shared.setResumeData(marker.id, data: resumeData)
+                DownloadStore.shared.update(marker.id, status: .paused,
+                    message: "网络中断，已保留断点；可尝试继续。")
+            } else {
+                DownloadStore.shared.update(marker.id, status: .failed,
+                    message: error.localizedDescription)
+            }
         }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        guard request.url?.scheme?.lowercased() == "https" else {
+            completionHandler(nil)
+            return
+        }
+        var safer = request
+        if response.url?.host?.lowercased() != request.url?.host?.lowercased() {
+            safer.setValue(nil, forHTTPHeaderField: "Cookie")
+            safer.setValue(nil, forHTTPHeaderField: "Authorization")
+            safer.setValue(nil, forHTTPHeaderField: "Referer")
+        }
+        completionHandler(safer)
     }
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {

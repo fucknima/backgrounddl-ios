@@ -12,7 +12,6 @@ final class DownloadStore: ObservableObject {
     private init() {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        // App 在锁屏状态下被系统唤醒时也需要可以访问任务列表。
         try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: root.path)
         databaseURL = root.appendingPathComponent("downloads.json")
         if let data = try? Data(contentsOf: databaseURL),
@@ -34,6 +33,7 @@ final class DownloadStore: ObservableObject {
     func add(_ item: DownloadItem) {
         items.insert(item, at: 0)
         persist()
+        DownloadActivityManager.shared.refresh(items, force: true)
     }
 
     func update(_ id: UUID, status: DownloadStatus, message: String? = nil, savedFilename: String? = nil) {
@@ -44,7 +44,23 @@ final class DownloadStore: ObservableObject {
         if status == .completed, items[index].totalBytes > 0 {
             items[index].downloadedBytes = items[index].totalBytes
         }
+        if status == .completed || status == .running || status == .cancelled || status == .failed {
+            items[index].resumeDataBase64 = nil
+        }
         persist()
+        DownloadActivityManager.shared.refresh(items, force: true)
+    }
+
+    func setResumeData(_ id: UUID, data: Data?) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].resumeDataBase64 = data?.base64EncodedString()
+        persist()
+    }
+
+    func resumeData(for id: UUID) -> Data? {
+        guard let item = items.first(where: { $0.id == id }),
+              let text = item.resumeDataBase64 else { return nil }
+        return Data(base64Encoded: text)
     }
 
     func progress(_ id: UUID, written: Int64, expected: Int64) {
@@ -57,6 +73,7 @@ final class DownloadStore: ObservableObject {
         items[index].totalBytes = expected
         lastProgressWrite[id] = now
         persist()
+        DownloadActivityManager.shared.refresh(items)
     }
 
     func reconcile(activeIDs: Set<UUID>, pausedIDs: Set<UUID>) {
@@ -64,9 +81,11 @@ final class DownloadStore: ObservableObject {
         for i in items.indices {
             if items[i].status == .running || items[i].status == .paused {
                 if !activeIDs.contains(items[i].id) {
-                    items[i].status = .failed
-                    items[i].errorMessage = "后台任务已中断，可点击重试（将重新下载）。"
-                    changed = true
+                    if items[i].status == .running {
+                        items[i].status = items[i].resumeDataBase64 == nil ? .failed : .paused
+                        items[i].errorMessage = items[i].resumeDataBase64 == nil ? "后台任务已中断，可点击重试。" : nil
+                        changed = true
+                    }
                 } else {
                     let status: DownloadStatus = pausedIDs.contains(items[i].id) ? .paused : .running
                     if items[i].status != status {
@@ -76,7 +95,10 @@ final class DownloadStore: ObservableObject {
                 }
             }
         }
-        if changed { persist() }
+        if changed {
+            persist()
+            DownloadActivityManager.shared.refresh(items, force: true)
+        }
     }
 
     func fileURL(for item: DownloadItem) -> URL? {
