@@ -172,11 +172,18 @@ private struct BrowserWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             state.updateNavigation(webView)
         }
+        // 网页下载被转交后台 URLSession 后，WebKit 会将原本的页面跳转标记为中断。
+        // WebKitErrorDomain 102 和 NSURLErrorCancelled(-999) 都是预期的取消，不应弹网页错误。
+        private func isExpectedNavigationCancellation(_ error: Error) -> Bool {
+            let nsError = error as NSError
+            return (nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled)
+                || (nsError.domain == "WebKitErrorDomain" && nsError.code == 102)
+        }
+
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             state.updateNavigation(webView)
-            if (error as NSError).code != NSURLErrorCancelled {
-                state.report("页面打开失败：\(error.localizedDescription)")
-            }
+            guard !isExpectedNavigationCancellation(error) else { return }
+            state.report("页面打开失败：\(error.localizedDescription)")
         }
 
         // <a download>、WebKit 标记为下载的链接，由独立后台 URLSession 接管。
