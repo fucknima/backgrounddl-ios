@@ -11,14 +11,15 @@
   <main>
     <header><div class="symbol" aria-hidden="true">☾</div><div><h1>智夜</h1><p>Safari 智能网页夜间模式</p></div></header>
     <section class="modes" aria-label="网页外观">
-      <button type="button" data-mode="auto" aria-pressed="true"><span><b>智能深色</b><small>跟随系统，仅将明亮网页变暗</small></span><span class="check">✓</span></button>
+      <button type="button" data-mode="auto" aria-pressed="true"><span><b>智能深色</b><small>跟随系统，使用 Dark Reader 动态深色引擎</small></span><span class="check">✓</span></button>
       <button type="button" data-mode="always" aria-pressed="false"><span><b>始终深色</b><small>对当前允许的网站强制变暗</small></span><span class="check">✓</span></button>
       <button type="button" data-mode="off" aria-pressed="false"><span><b>网站原样</b><small>关闭全局网页颜色处理</small></span><span class="check">✓</span></button>
     </section>
     <section class="site"><div><b>不处理当前网站</b><small id="siteName">正在读取网站…</small></div>
       <label class="switch"><input id="skipSite" type="checkbox" aria-label="不处理当前网站"><span></span></label>
     </section>
-    <p class="note">对已自带深色主题的网站，智能模式会尽量避免二次反色。遇到异常排版，可为该网站单独关闭。</p>
+    <p class="note">如果显示「未检测到扩展注入」，请在 Safari 地址栏扩展菜单给智夜允许当前网站访问权限。</p>
+    <p id="engineStatus" role="status" aria-live="polite">正在检测网页注入状态…</p>
     <p id="status" role="status" aria-live="polite"></p>
   </main>
 </body>
