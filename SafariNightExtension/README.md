@@ -1,29 +1,30 @@
-# 智夜 · Safari 智能网页夜间模式
+# 智夜 Safari Extension v2.0
 
-将同仓库后台下载器 BrowserView.swift 的自适应网页夜间模式，独立移植为 **iPhone Safari Web Extension**，原下载器代码不作修改。
+这是原后台下载器独立的 Safari 扩展子项目。
 
-- **智能深色（默认）**：系统深色模式下，使用九点背景亮度采样，仅处理明亮网页。
-- **始终深色**：强制对网页做颜色反转并纠正图片、视频、SVG、Canvas 的色彩。
-- **网站原样**：完全停用颜色处理。
-- **网站例外**：针对当前域名单独关闭夜间模式。
-- **隐私**：无统计、无第三方 API、无上传；扩展只读取浏览器本地设置及网页背景颜色。Safari 需要你明确授予网站访问权限。
+**核心采用 [Dark Reader](https://github.com/darkreader/darkreader) 开源动态主题引擎（MIT License）。** 无整页 `filter: invert()`，也不使用旧版逐元素 `MutationObserver` 改写 CSS；原来的 JavaScript 已被弃用。
 
-## GitHub Actions 编译与安装
+- 智能深色：只在系统深色模式启用，并尽量识别网页的原生深色主题
+- 始终深色：Dark Reader 动态引擎，不做图片/网页整页反色；避免阻断页面交互
+- 网站原样：完全禁用引擎
+- 网站例外：当前域名单独禁用（基于本地存储）
+- 防白闪：在 `document_start` 注入安全的预绘制背景规则，超时自动释放，不隐藏网页
+- 图标：构建时生成 iOS 18+ 的 Light/Dark/Tinted 外观 AppIcon 资源并用 `actool` 编译
 
-上传这些文件到 main 分支后，工作流 `构建Safari智夜插件` 将尝试在 GitHub 的 macOS runner 上执行 Apple 官方 `safari-web-extension-packager`，然后用 Xcode 编译 **未签名 iOS IPA**。
+## 可复现构建
 
-1. 打开仓库的 **Actions**，选择 **构建Safari智夜插件**。
-2. 进入成功的运行记录 → **Artifacts** → 下载 `SafariNight-unsigned-IPA`（压缩包中有 .ipa）。
-3. 使用你自己的有效开发签名或兼容的签名工具对 IPA **连同内置的 .appex 扩展一并正确签名**并安装。
-4. 在 iPhone **设置 → App → Safari → 扩展**（不同 iOS 版本菜单可能略有不同）里启用「智夜」，授权需要的网站，然后在 Safari 的扩展菜单打开设置。
+由 `.github/workflows/build-safari-night.yml` 在 macOS runner：
 
-**说明**：未签名 IPA 不能直接安装。签名应覆盖主 App 和 Safari 扩展，两者的 Bundle ID 和 provisioning 必须符合你的开发者证书配置。免费签名服务、企业证书和侧载工具对 App Extension 的支持不一定一致。GitHub Actions 能完成构建不等于在每台设备上都能正常签名安装。
+1. `npm install darkreader@4.9.130 esbuild@0.25.12`。
+2. 打包 `engine-src.js` + Dark Reader 到扩展的 `content.js`（完全离线运行，不使用 CDN）。
+3. 由 Apple `safari-web-extension-packager` / `safari-web-extension-converter` 生成原生 Xcode 工程。
+4. 使用 `xcodebuild` 编译未签名 iOS App + Safari Extension。
+5. 使用 `actool` 编译真实的 iOS 浅色、深色、着色 App 图标资源，注入主 App 的 `CFBundleIcons`。
+6. 验证 IPA 包含 `.appex`、引擎文件、AppIcon 的 `Assets.car`。
+7. 导出 **SafariNight-v2-unsigned.ipa** 到 GitHub Actions Artifacts。
 
-## 项目文件
+注意：GitHub Actions 编译成功 ≠ iPhone 实机已测试。Safari 系统限制、第三方网站复杂 CSS 和跨域资源会影响覆盖率，不承诺百分之百网站无闪白。
 
-`manifest.json`：扩展权限、配置。
-`content.js`：从下载器算法移植的网页变暗逻辑。
-`popup.html/css/js`：中文夜间模式设置面板。
-`.github/workflows/build-safari-night.yml`：Apple 官方打包工具 + Xcode 自动构建流程。
+## 开源许可
 
-原项目：`fucknima/backgrounddl-ios`。
+Dark Reader © Dark Reader Ltd. MIT License。构建时随 App 附带依赖完整的 `LICENSE` 许可证文本。
