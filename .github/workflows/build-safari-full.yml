@@ -62,6 +62,30 @@ jobs:
             -o "$EXT/UPSTREAM-LICENSE.txt" \
             "https://raw.githubusercontent.com/darkreader/darkreader/v4.9.133/LICENSE"
           test -s "$EXT/UPSTREAM-LICENSE.txt"
+          # Replace ONLY the browser-action UI. The official Dark Reader
+          # background engine, content scripts and website fixes stay intact.
+          # Keep the original popup path: upstream background messenger whitelists
+          # its exact URL as an authorized settings sender.
+          cp "$GITHUB_WORKSPACE/SafariNightFull/custom-ui/index.html" "$EXT/ui/popup/index.html"
+          cp "$GITHUB_WORKSPACE/SafariNightFull/custom-ui/zhiye.css" "$EXT/ui/popup/zhiye.css"
+          cp "$GITHUB_WORKSPACE/SafariNightFull/custom-ui/zhiye.js" "$EXT/ui/popup/zhiye.js"
+          test -s "$EXT/ui/popup/zhiye.css"
+          node --check "$EXT/ui/popup/zhiye.js"
+          grep -q "ui-bg-get-data" "$EXT/ui/popup/zhiye.js"
+          grep -q "ui-bg-set-theme" "$EXT/ui/popup/zhiye.js"
+          grep -q "ui-bg-change-settings" "$EXT/ui/popup/zhiye.js"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          ext=Path(os.environ["RUNNER_TEMP"])/"ExtensionReady"
+          manifest=json.loads((ext/"manifest.json").read_text())
+          assert manifest["action"]["default_popup"] == "ui/popup/index.html"
+          html=(ext/"ui/popup/index.html").read_text()
+          assert "智夜" in html and "zhiye.js" in html and "zhiye.css" in html
+          assert (ext/"inject/index.js").exists()
+          assert (ext/"config").is_dir()
+          print("Original UI installed; full upstream dark engine preserved")
+          PY
 
       - name: Generate adaptive iOS app icons
         shell: bash
@@ -132,8 +156,8 @@ jobs:
           data.update({k:v for k,v in partial.items() if k in ('CFBundleIcons','CFBundleIcons~ipad','CFBundleIconName')})
           data.setdefault("CFBundleIcons",{"CFBundlePrimaryIcon":{"CFBundleIconName":"AppIcon"}})
           data["CFBundleDisplayName"]="智夜"
-          data["CFBundleShortVersionString"]="3.0.0"
-          data["CFBundleVersion"]="3"
+          data["CFBundleShortVersionString"]="3.1.0"
+          data["CFBundleVersion"]="4"
           p.write_bytes(plistlib.dumps(data))
           ext=list((app/"PlugIns").glob("*.appex"))
           assert len(ext)==1, f"Expected one Safari extension, got {len(ext)}"
@@ -146,6 +170,10 @@ jobs:
             "background/index.js","ui/popup/index.html","UPSTREAM-LICENSE.txt"
           ]
           for n in paths: assert (ext[0]/n).exists(),f"Missing {n}"
+          custom=ext[0]/"ui/popup/index.html"
+          assert "让每个网页，舒适一点" in custom.read_text(), "Original UI not installed"
+          assert (ext[0]/"ui/popup/zhiye.js").exists()
+          assert (ext[0]/"ui/popup/zhiye.css").exists()
           manifest=(ext[0]/"manifest.json").read_text()
           assert "智夜" in manifest
           print("Official full extension and host app verified")
