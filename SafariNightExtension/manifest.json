@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "智夜 · Dark Reader",
   "short_name": "智夜",
-  "version": "2.0.0",
-  "description": "使用开源 Dark Reader 动态主题引擎，支持 Safari 自动深色、强制深色、站点例外。",
+  "version": "2.1.0",
+  "description": "开源 Dark Reader 动态主题：修复自动误判，搜狗专属白屏样式补救，新增扩展注入状态检测。",
   "permissions": [
     "storage",
     "activeTab"
@@ -39,6 +39,17 @@
       ],
       "js": [
         "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "*://m.sogou.com/*",
+        "*://*.m.sogou.com/*"
+      ],
+      "css": [
+        "sogou-fix.css"
       ],
       "run_at": "document_start",
       "all_frames": true
