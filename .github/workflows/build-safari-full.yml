@@ -1,0 +1,180 @@
+name: 构建智夜完整DarkReader
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "SafariNightFull/**"
+      - ".github/workflows/build-safari-full.yml"
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch official Dark Reader full extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          UPSTREAM_VERSION=v4.9.133
+          LINK="https://github.com/darkreader/darkreader/releases/download/${UPSTREAM_VERSION}/darkreader-chrome-mv3.zip"
+          curl --fail --location --retry 4 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 20 -o "$RUNNER_TEMP/upstream.zip" "$LINK"
+          mkdir -p "$RUNNER_TEMP/ExtensionReady"
+          unzip -q "$RUNNER_TEMP/upstream.zip" -d "$RUNNER_TEMP/ExtensionReady"
+          EXT="$RUNNER_TEMP/ExtensionReady"
+          test -f "$EXT/manifest.json"
+          test -s "$EXT/inject/index.js"
+          test -s "$EXT/inject/fallback.js"
+          test -s "$EXT/inject/proxy.js"
+          test -s "$EXT/background/index.js"
+          test -d "$EXT/config"
+          test -d "$EXT/_locales"
+          ls "$EXT/config"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          ext = Path(os.environ['RUNNER_TEMP'])/'ExtensionReady'
+          m = json.loads((ext/'manifest.json').read_text())
+          assert m['manifest_version'] == 3
+          assert m['background'].get('service_worker')
+          assert len(m.get('content_scripts',[])) >= 2
+          assert m.get('action',{}).get('default_popup')
+          print('Official manifest valid:',m['name'],m['version'])
+          print('Scripts:',[(e.get('world'),e.get('run_at'),len(e.get('js',[]))) for e in m['content_scripts']])
+          print('Total bundled configs', len(list((ext/'config').rglob('*'))))
+          # Only brand the display metadata; leave official scripts/settings/config as-is.
+          m['name'] = "智夜 · Dark Reader"
+          m['short_name'] = "智夜"
+          m['description'] = "基于开源 Dark Reader 完整浏览器扩展的 Safari 夜间模式"
+          (ext/'manifest.json').write_text(json.dumps(m,ensure_ascii=False,indent=2)+'\n')
+          PY
+          curl --fail --location --retry 3 --retry-all-errors \
+            -o "$EXT/UPSTREAM-LICENSE.txt" \
+            "https://raw.githubusercontent.com/darkreader/darkreader/v4.9.133/LICENSE"
+          test -s "$EXT/UPSTREAM-LICENSE.txt"
+
+      - name: Generate adaptive iOS app icons
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install pillow==11.3.0
+          python3 SafariNightExtension/generate_icons.py \
+            "$RUNNER_TEMP/ExtensionReady" "$RUNNER_TEMP/AppIconAssets.xcassets"
+          test -s "$RUNNER_TEMP/ExtensionReady/AppIcon-Preview.png"
+
+      - name: Convert official browser extension into Safari iOS host
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOL=safari-web-extension-packager
+          xcrun --find "$TOOL" >/dev/null 2>&1 || TOOL=safari-web-extension-converter
+          xcrun --find "$TOOL" >/dev/null 2>&1
+          xcrun "$TOOL" "$RUNNER_TEMP/ExtensionReady" \
+            --project-location "$RUNNER_TEMP/SafariNightFullXcode" \
+            --app-name "SafariNight" \
+            --bundle-identifier "io.github.fucknima.safarinightfull" \
+            --ios-only --swift --copy-resources --no-open --no-prompt
+
+      - name: Xcode compile app and complete Safari extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT="$(find "$RUNNER_TEMP/SafariNightFullXcode" -name '*.xcodeproj' -type d -print -quit)"
+          test -d "$PROJECT"
+          xcodebuild -list -json -project "$PROJECT" > "$RUNNER_TEMP/schemes.json"
+          SCHEME="$(python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/schemes.json")); a=d["project"]["schemes"]; names=[n for n in a if "Extension" not in n]; print((names or a)[0])')"
+          echo "Building scheme $SCHEME"
+          xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > "$RUNNER_TEMP/build.log" 2>&1 || {
+              tail -n 150 "$RUNNER_TEMP/build.log"
+              exit 1
+            }
+          tail -n 16 "$RUNNER_TEMP/build.log"
+
+      - name: Apply genuine iOS Light Dark Tinted App Icon catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          test -n "$APP"
+          mkdir -p "$RUNNER_TEMP/IconBuild"
+          xcrun actool --compile "$RUNNER_TEMP/IconBuild" --platform iphoneos \
+            --minimum-deployment-target 18.0 --target-device iphone \
+            --app-icon AppIcon --output-partial-info-plist "$RUNNER_TEMP/icon-info.plist" \
+            "$RUNNER_TEMP/AppIconAssets.xcassets"
+          test -s "$RUNNER_TEMP/IconBuild/Assets.car"
+          cp "$RUNNER_TEMP/IconBuild/Assets.car" "$APP/Assets.car"
+          cp "$RUNNER_TEMP/ExtensionReady/AppIcon-Preview.png" "$APP/Icon.png"
+          cp "$RUNNER_TEMP/ExtensionReady/AppIcon-Preview-Dark.png" "$APP/Icon-Dark.png"
+          cp SafariNightExtension/HostMain.html "$APP/Base.lproj/Main.html"
+          cp SafariNightExtension/HostStyle.css "$APP/Style.css"
+          export APP
+          python3 - <<'PY'
+          import os, plistlib
+          from pathlib import Path
+          app=Path(os.environ["APP"])
+          p=app/"Info.plist"
+          data=plistlib.loads(p.read_bytes())
+          partial=plistlib.loads((Path(os.environ["RUNNER_TEMP"])/"icon-info.plist").read_bytes())
+          data.update({k:v for k,v in partial.items() if k in ('CFBundleIcons','CFBundleIcons~ipad','CFBundleIconName')})
+          data.setdefault("CFBundleIcons",{"CFBundlePrimaryIcon":{"CFBundleIconName":"AppIcon"}})
+          data["CFBundleDisplayName"]="智夜"
+          data["CFBundleShortVersionString"]="3.0.0"
+          data["CFBundleVersion"]="3"
+          p.write_bytes(plistlib.dumps(data))
+          ext=list((app/"PlugIns").glob("*.appex"))
+          assert len(ext)==1, f"Expected one Safari extension, got {len(ext)}"
+          ep=ext[0]/"Info.plist"
+          ei=plistlib.loads(ep.read_bytes())
+          ei["CFBundleDisplayName"]="智夜 · Dark Reader"
+          ep.write_bytes(plistlib.dumps(ei))
+          paths=[
+            "manifest.json","inject/index.js","inject/fallback.js","inject/proxy.js",
+            "background/index.js","ui/popup/index.html","UPSTREAM-LICENSE.txt"
+          ]
+          for n in paths: assert (ext[0]/n).exists(),f"Missing {n}"
+          manifest=(ext[0]/"manifest.json").read_text()
+          assert "智夜" in manifest
+          print("Official full extension and host app verified")
+          PY
+          xcrun --sdk iphoneos assetutil --info "$APP/Assets.car" > "$RUNNER_TEMP/assets.json"
+          python3 - <<'PY'
+          import json,os
+          a=json.load(open(os.environ["RUNNER_TEMP"]+"/assets.json"))
+          icons=[x for x in a if x.get("Name")=="AppIcon"]
+          assert icons, "Missing adaptive AppIcon set"
+          print("Compiled AppIcon records:",len(icons))
+          PY
+
+      - name: Package verified IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          mkdir -p "$RUNNER_TEMP/Pack/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Pack/Payload/"
+          (cd "$RUNNER_TEMP/Pack" && zip -qry "$GITHUB_WORKSPACE/ZhiYe-FullDarkReader-unsigned.ipa" Payload)
+          unzip -t "$GITHUB_WORKSPACE/ZhiYe-FullDarkReader-unsigned.ipa" | tail -n 1
+          unzip -l "$GITHUB_WORKSPACE/ZhiYe-FullDarkReader-unsigned.ipa" | grep -F "inject/index.js"
+          unzip -l "$GITHUB_WORKSPACE/ZhiYe-FullDarkReader-unsigned.ipa" | grep -F "AppIcon"
+
+      - name: Upload unsigned iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZhiYe-FullDarkReader-iOS-unsigned
+          path: ZhiYe-FullDarkReader-unsigned.ipa
+          retention-days: 14
+          if-no-files-found: error
