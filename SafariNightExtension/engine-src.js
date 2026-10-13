@@ -31,6 +31,99 @@ import * as DarkReader from "darkreader";
   let resolved = false;
   let started = false;
   let loadingTimeout = 0;
+  const isSogou = /(^|\.)m\.sogou\.com$/i.test(host);
+  let fallbackTimer = 0;
+  let sogouObserver = null;
+  let sogouFallback = false;
+  let lastEngineError = "";
+
+  // Safari permissions and fast-changing SPA styles can both look like a failed
+  // dark theme. Report observable state to the popup instead of guessing.
+  function status() {
+    return {
+      hostname: host,
+      mode: settings.mode,
+      systemDark: colorPreference.matches,
+      excluded: Boolean(settings.excludedSites?.[host]),
+      wantsDark: desired,
+      darkReaderEnabled: mounted && DarkReader.isEnabled(),
+      darkReaderMode: root.getAttribute("data-darkreader-mode") || "",
+      sogouFallback,
+      error: lastEngineError
+    };
+  }
+
+  function visibleBackground(node) {
+    for (let i = 0; node && i < 8; i++, node = node.parentElement) {
+      if (node.nodeType !== 1) continue;
+      const color = getComputedStyle(node).backgroundColor;
+      const match = color.match(/rgba?\(\s*(\d+)[, ]+\s*(\d+)[, ]+\s*(\d+)(?:[,/ ]+([\d.]+))?\s*\)/i);
+      if (match && (match[4] === undefined || Number(match[4]) >= 0.85)) {
+        return (Number(match[1]) * .2126 + Number(match[2]) * .7152 + Number(match[3]) * .0722) / 255;
+      }
+    }
+    return 1;
+  }
+
+  function markSogouSurfaces() {
+    if (!sogouFallback || !document.body) return;
+    const tree = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    const t0 = performance.now();
+    let count = 0, el;
+    const surfaces = "DIV,SECTION,ARTICLE,MAIN,HEADER,FOOTER,NAV,FORM,LI,UL,ASIDE";
+    while ((el = tree.nextNode()) && count++ < 750 && performance.now() - t0 < 22) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (!surfaces.split(",").includes(el.tagName)) continue;
+      const color = getComputedStyle(el).backgroundColor;
+      const match = color.match(/rgba?\(\s*(\d+)[, ]+\s*(\d+)[, ]+\s*(\d+)(?:[,/ ]+([\d.]+))?\s*\)/i);
+      if (!match || (match[4] !== undefined && Number(match[4]) < .85)) continue;
+      const brightness = (Number(match[1]) * .2126 + Number(match[2]) * .7152 + Number(match[3]) * .0722) / 255;
+      if (brightness > .82) el.setAttribute("data-zny-bright-surface", "1");
+    }
+  }
+
+  function clearSogouFallback() {
+    clearTimeout(fallbackTimer);
+    sogouObserver?.disconnect();
+    sogouObserver = null;
+    sogouFallback = false;
+    root.removeAttribute("data-zny-sogou-fallback");
+    // Do not write inline style properties: cleanup remains safe for app sites.
+    document.querySelectorAll("[data-zny-bright-surface]").forEach((node) =>
+      node.removeAttribute("data-zny-bright-surface"));
+  }
+
+  function checkSogou() {
+    if (!isSogou || !desired || !mounted || !document.body || sogouFallback) return;
+    const w = innerWidth || 1, h = innerHeight || 1;
+    const coords = [[.1,.1],[.5,.1],[.9,.1],[.1,.45],[.5,.45],[.9,.45],[.1,.82],[.5,.82],[.9,.82]];
+    let light = 0, total = 0;
+    for (const [x,y] of coords) {
+      const node = document.elementFromPoint(Math.floor(w*x), Math.floor(h*y));
+      if (!node) continue;
+      total++;
+      if (visibleBackground(node) > .77) light++;
+    }
+    // Only a mostly WHITE result after Dark Reader has had time to analyze
+    // stylesheets gets fallback. Dark/native websites are left alone.
+    if (!total || light / total < .55) return;
+    sogouFallback = true;
+    markSogouSurfaces();
+    root.setAttribute("data-zny-sogou-fallback", "1");
+    let queued = false;
+    sogouObserver = new MutationObserver((changes) => {
+      if (queued || !changes.some(c => c.type === "childList" && c.addedNodes.length)) return;
+      queued = true;
+      setTimeout(() => { queued = false; markSogouSurfaces(); }, 650);
+    });
+    sogouObserver.observe(document.body, {subtree: true, childList: true});
+  }
+
+  function scheduleSogouCheck() {
+    if (!isSogou || !desired || !mounted || sogouFallback) return;
+    clearTimeout(fallbackTimer);
+    fallbackTimer = setTimeout(checkSogou, 1300);
+  }
 
   function bgColor(node) {
     if (!node) return null;
@@ -39,21 +132,6 @@ import * as DarkReader from "darkreader";
     if (match[4] != null && Number(match[4]) < 0.85) return null;
     const red = Number(match[1]), green = Number(match[2]), blue = Number(match[3]);
     return (red * 0.2126 + green * 0.7152 + blue * 0.0722) / 255;
-  }
-
-  function nativeDarkTheme() {
-    if (!document.body) return false;
-    // Read DOM before Dark Reader is enabled; do not inspect its own generated colors.
-    // Ignore the prepaint root CSS when determining native theme.
-    const bodyBrightness = bgColor(document.body);
-    const bodyText = getComputedStyle(document.body).color;
-    const textMatch = bodyText.match(/rgba?\(\s*(\d+)[, ]+\s*(\d+)[, ]+\s*(\d+)/i);
-    const textBrightness = textMatch
-      ? (Number(textMatch[1]) + Number(textMatch[2]) + Number(textMatch[3])) / 765
-      : 0;
-    if (bodyBrightness !== null && bodyBrightness < 0.32 && textBrightness > 0.52) return true;
-    const scheme = (document.querySelector('meta[name="color-scheme"]')?.content || "").toLowerCase();
-    return scheme.includes("dark") && !scheme.includes("light") && bodyBrightness !== null && bodyBrightness < 0.4;
   }
 
   function releasePrepaint() {
@@ -68,22 +146,30 @@ import * as DarkReader from "darkreader";
     const mode = ["auto", "always", "off"].includes(settings.mode) ? settings.mode : "auto";
     const excluded = Boolean(settings.excludedSites?.[host]);
     const wantsDark = !excluded && (mode === "always" || (mode === "auto" && colorPreference.matches));
-    // For auto, allow pages with a genuine native dark theme to render themselves.
-    desired = wantsDark && !(mode === "auto" && !mounted && nativeDarkTheme());
+    // A single body's background is NOT proof of a fully dark page.
+    // In particular, white SPA cards on a dark/transparent body were wrongly skipped.
+    // Let Dark Reader handle mixed themes instead of excluding the entire document.
+    desired = wantsDark;
     try {
       if (desired && !mounted) {
         DarkReader.enable(THEMING, FIXES);
         mounted = true;
+        lastEngineError = "";
+        scheduleSogouCheck();
       } else if (!desired && mounted) {
         DarkReader.disable();
         mounted = false;
+        clearSogouFallback();
       }
     } catch (error) {
       // The extension must never block navigation or break page interaction.
+      lastEngineError = String(error?.message || error);
       console.warn("[智夜] Dark Reader skipped this page:", error);
+      clearSogouFallback();
       try { DarkReader.disable(); } catch (_) {}
       mounted = false;
     } finally {
+      if (!desired) clearSogouFallback();
       releasePrepaint();
     }
   }
@@ -137,12 +223,15 @@ import * as DarkReader from "darkreader";
 
   api.runtime?.onMessage?.addListener((message) => {
     if (message?.type === "zhiyeyue:getHost") return Promise.resolve({hostname: host});
+    if (message?.type === "zhiyeyue:getStatus") return Promise.resolve(status());
     if (message?.type === "zhiyeyue:refresh") {
       apply();
-      return Promise.resolve({ok: true, enabled: mounted});
+      scheduleSogouCheck();
+      return Promise.resolve({ok: true, ...status()});
     }
     return undefined;
   });
 
-  window.addEventListener("pageshow", apply);
+  window.addEventListener("pageshow", () => { apply(); scheduleSogouCheck(); });
+  document.addEventListener("DOMContentLoaded", scheduleSogouCheck, {once: true});
 })();
