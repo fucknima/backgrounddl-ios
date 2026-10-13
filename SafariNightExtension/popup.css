@@ -1,0 +1,25 @@
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;min-width:300px;max-width:370px;background:#101319;color:#f6f8ff}
+main{padding:17px}
+header{display:flex;align-items:center;gap:11px;margin-bottom:18px}
+.symbol{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:linear-gradient(145deg,#22365a,#121d35);font-size:31px;color:#a8c5ff}
+h1{margin:0;font-size:20px;letter-spacing:.4px}header p{margin:4px 0 0;color:#a9b1c3;font-size:11px}
+.modes{display:flex;flex-direction:column;border:1px solid #313744;border-radius:17px;overflow:hidden;background:#1c2028}
+.modes button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 13px;background:none;border:0;border-bottom:1px solid #313744;color:inherit;text-align:left;cursor:pointer}
+.modes button:last-child{border-bottom:0}
+.modes button[aria-pressed=true]{background:#25334c}
+b{font-size:13px;font-weight:650}small{display:block;margin-top:5px;font-size:11px;line-height:1.4;color:#aeb7c9}
+.check{opacity:0;width:23px;height:23px;text-align:center;line-height:23px;border-radius:50%;background:#4b91ff;color:white;font-weight:bold}
+.modes button[aria-pressed=true] .check{opacity:1}
+.site{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 12px;margin-top:15px;border:1px solid #313744;border-radius:16px;background:#1c2028}
+#siteName{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.switch{position:relative;display:block;flex-shrink:0;width:45px;height:27px}
+.switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0}
+.switch span{display:block;height:100%;border-radius:18px;background:#50586a;transition:background .2s}
+.switch span:after{content:"";position:absolute;width:21px;height:21px;top:3px;left:3px;border-radius:50%;background:white;transition:transform .2s}
+.switch input:checked+span{background:#4b91ff}.switch input:checked+span:after{transform:translateX(18px)}
+.switch input:focus-visible+span{outline:2px solid #96b9ff;outline-offset:3px}
+.switch input:disabled+span{opacity:.35}
+.note{margin:14px 5px 0;font-size:11px;line-height:1.6;color:#8e98ac}
+#status{min-height:14px;margin:10px 5px 0;font-size:11px;color:#8ad7aa}
