@@ -5,6 +5,36 @@
   const siteToggle = document.getElementById("skipSite");
   const siteName = document.getElementById("siteName");
   const status = document.getElementById("status");
+  const engineStatus = document.getElementById("engineStatus");
+  async function checkEngine() {
+    if (tabId == null) {
+      engineStatus.textContent = "当前页面无法检测扩展运行状态";
+      return;
+    }
+    try {
+      const response = await api.tabs.sendMessage(tabId, {type: "zhiyeyue:getStatus"});
+      if (!response || !response.hostname) throw Error("no injected content script");
+      host = String(response.hostname).toLowerCase();
+      render();
+      if (response.error) {
+        engineStatus.textContent = "深色引擎报错：" + response.error.slice(0, 85);
+      } else if (response.excluded) {
+        engineStatus.textContent = "当前网站已设为例外，不进行变色";
+      } else if (response.mode === "off") {
+        engineStatus.textContent = "当前设置：网站原样";
+      } else if (response.mode === "auto" && !response.systemDark) {
+        engineStatus.textContent = "系统当前为浅色外观，智能模式没有启用";
+      } else if (response.darkReaderEnabled) {
+        engineStatus.textContent = response.sogouFallback
+          ? "引擎已运行，搜狗专用补色已启用"
+          : "Dark Reader 已在当前页面运行";
+      } else {
+        engineStatus.textContent = "内容脚本已注入，但深色引擎未成功启用";
+      }
+    } catch (_) {
+      engineStatus.textContent = "未检测到网页注入。请检查 Safari 的网站访问授权，并刷新网页。";
+    }
+  }
   let host = "";
   let tabId = null;
   let mode = "auto";
@@ -46,6 +76,7 @@
       }
     } catch (_) { /* 系统页或未授权网站无法读取地址，保留全局开关。 */ }
     render();
+    await checkEngine();
   }
 
   buttons.forEach(button => button.addEventListener("click", async () => {
@@ -54,6 +85,7 @@
       await api.storage.local.set({ mode: next });
       mode = next; render(); await refreshPage();
       notify("已保存网页外观设置");
+      await checkEngine();
     } catch (_) { notify("保存失败，请检查 Safari 扩展权限", true); }
   }));
   siteToggle.addEventListener("change", async () => {
@@ -65,6 +97,7 @@
       await api.storage.local.set({ excludedSites: next });
       excludedSites = next; render(); await refreshPage();
       notify(siteToggle.checked ? "当前网站已加入例外" : "当前网站已恢复网页外观规则");
+      await checkEngine();
     } catch (_) { render(); notify("网站例外保存失败", true); }
   });
   initialize();
