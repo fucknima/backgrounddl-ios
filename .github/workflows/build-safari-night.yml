@@ -16,70 +16,161 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check tools and validate manifest
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned MIT Dark Reader and build tools
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -version
-          if xcrun --find safari-web-extension-packager >/dev/null 2>&1; then
-            echo "Using Safari web extension packager"
-          elif xcrun --find safari-web-extension-converter >/dev/null 2>&1; then
-            echo "Using legacy Safari web extension converter"
-          else
-            echo "::error::Neither Apple Safari Web Extension CLI is available with this Xcode"
+          npm install --no-save --no-package-lock --no-audit --no-fund \
+            --prefix SafariNightExtension \
+            darkreader@4.9.130 esbuild@0.25.12
+          python3 -m pip install pillow==11.3.0
+
+      - name: Bundle real Dark Reader and generate native appearance icons
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXT="$RUNNER_TEMP/ExtensionReady"
+          mkdir -p "$EXT"
+          cp -R SafariNightExtension/. "$EXT/"
+          ./SafariNightExtension/node_modules/.bin/esbuild \
+            SafariNightExtension/engine-src.js --bundle --platform=browser \
+            --format=iife --target=safari16 --minify \
+            --outfile="$EXT/content.js"
+          cp SafariNightExtension/node_modules/darkreader/LICENSE "$EXT/DarkReader-LICENSE.txt"
+          python3 SafariNightExtension/generate_icons.py "$EXT" "$RUNNER_TEMP/AppIconAssets.xcassets"
+          node --check "$EXT/content.js"
+          python3 -m json.tool "$EXT/manifest.json" >/dev/null
+          test -s "$EXT/DarkReader-LICENSE.txt"
+          test "$(wc -c < "$EXT/content.js")" -gt 10000
+          if grep -q 'This placeholder is replaced' "$EXT/content.js"; then
+            echo '::error::Placeholder JavaScript accidentally packaged'
             exit 1
           fi
-          plutil -lint -s -r SafariNightExtension/manifest.json || python3 -m json.tool SafariNightExtension/manifest.json >/dev/null
+          ls -lah "$EXT/content.js" "$EXT/icon-128.png"
 
-      - name: Create official Safari Web Extension Xcode project
+      - name: Create Apple Safari extension Xcode project
         shell: bash
         run: |
           set -euo pipefail
           TOOL=safari-web-extension-packager
           xcrun --find "$TOOL" >/dev/null 2>&1 || TOOL=safari-web-extension-converter
-          xcrun "$TOOL" "$GITHUB_WORKSPACE/SafariNightExtension" \
+          xcrun --find "$TOOL" >/dev/null 2>&1
+          xcrun "$TOOL" "$RUNNER_TEMP/ExtensionReady" \
             --project-location "$RUNNER_TEMP/SafariNightXcode" \
             --app-name "SafariNight" \
             --bundle-identifier "io.github.fucknima.safarinight" \
             --ios-only --swift --copy-resources --no-open --no-prompt
-          find "$RUNNER_TEMP/SafariNightXcode" -maxdepth 5 -name '*.xcodeproj' -print
 
-      - name: Build unsigned iOS app and embedded Safari extension
+      - name: Compile unsigned iOS host and Safari .appex
         shell: bash
         run: |
           set -euo pipefail
           PROJECT="$(find "$RUNNER_TEMP/SafariNightXcode" -name '*.xcodeproj' -type d -print -quit)"
           test -n "$PROJECT"
-          export PROJECT
           xcodebuild -list -json -project "$PROJECT" > "$RUNNER_TEMP/schemes.json"
-          SCHEME="$(python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/schemes.json")); schemes=d["project"]["schemes"]; names=[n for n in schemes if "Extension" not in n and "扩展" not in n]; print((names or schemes)[0])')"
-          echo "Building scheme: $SCHEME"
+          SCHEME="$(python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/schemes.json")); a=d["project"]["schemes"]; names=[n for n in a if "Extension" not in n]; print((names or a)[0])')"
+          echo "Scheme: $SCHEME"
+          set -o pipefail
           xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
             -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tee "$RUNNER_TEMP/build.log"
+            build > "$RUNNER_TEMP/build.log" 2>&1 || {
+              tail -n 130 "$RUNNER_TEMP/build.log"
+              exit 1
+            }
+          tail -n 12 "$RUNNER_TEMP/build.log"
 
-      - name: Package IPA and verify embedded extension
+      - name: Compile Apple Light Dark Tinted app icon assets
         shell: bash
         run: |
           set -euo pipefail
           APP="$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -type d -name '*.app' -print -quit)"
-          test -d "$APP"
-          test -d "$APP/PlugIns"
-          find "$APP/PlugIns" -maxdepth 1 -name '*.appex' -type d | grep -q .
-          echo "App: $APP"
-          find "$APP/PlugIns" -name manifest.json -print
-          mkdir -p "$RUNNER_TEMP/PayloadBuild/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/PayloadBuild/Payload/"
-          (cd "$RUNNER_TEMP/PayloadBuild" && zip -qry "$GITHUB_WORKSPACE/SafariNight-unsigned.ipa" Payload)
-          test -s "$GITHUB_WORKSPACE/SafariNight-unsigned.ipa"
-          unzip -l "$GITHUB_WORKSPACE/SafariNight-unsigned.ipa" | grep -F '.appex/' | head -n 1
+          test -n "$APP"
+          mkdir -p "$RUNNER_TEMP/IconBuild"
+          xcrun actool \
+            --compile "$RUNNER_TEMP/IconBuild" \
+            --platform iphoneos \
+            --minimum-deployment-target 17.0 \
+            --target-device iphone \
+            --app-icon AppIcon \
+            --output-partial-info-plist "$RUNNER_TEMP/AppIcon-partial.plist" \
+            "$RUNNER_TEMP/AppIconAssets.xcassets"
+          test -s "$RUNNER_TEMP/IconBuild/Assets.car"
+          cp "$RUNNER_TEMP/IconBuild/Assets.car" "$APP/Assets.car"
+          export APP
+          python3 - <<'PY'
+          import os, plistlib
+          from pathlib import Path
+          app = Path(os.environ["APP"])
+          p = app/"Info.plist"
+          info = plistlib.loads(p.read_bytes())
+          partial = plistlib.loads((Path(os.environ["RUNNER_TEMP"])/"AppIcon-partial.plist").read_bytes())
+          for key in ("CFBundleIcons", "CFBundleIcons~ipad", "CFBundleIconName"):
+              if key in partial:
+                  info[key] = partial[key]
+          info["CFBundleDisplayName"] = "智夜"
+          info["CFBundleShortVersionString"] = "2.0.0"
+          info["CFBundleVersion"] = "2"
+          if not info.get("CFBundleIcons"):
+              info["CFBundleIcons"] = {"CFBundlePrimaryIcon":{"CFBundleIconName":"AppIcon"}}
+          p.write_bytes(plistlib.dumps(info))
+          print("App icon info:",info["CFBundleIcons"])
+          assert info["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"]=="AppIcon"
+          extensions=list((app/"PlugIns").glob("*.appex"))
+          assert extensions, "Safari appex missing"
+          for ext in extensions:
+              ep = ext/"Info.plist"
+              e = plistlib.loads(ep.read_bytes())
+              e["CFBundleDisplayName"] = "智夜"
+              e["CFBundleShortVersionString"]="2.0.0"
+              e["CFBundleVersion"]="2"
+              ep.write_bytes(plistlib.dumps(e))
+              assert (ext/"content.js").stat().st_size > 10000
+              assert (ext/"prepaint.css").exists()
+              assert (ext/"DarkReader-LICENSE.txt").exists()
+              assert (ext/"icon-128.png").exists()
+              print("Validated native extension:",ext.name)
+          PY
+          echo "Checking compiled light/dark/tinted asset catalog:"
+          xcrun --sdk iphoneos assetutil --info "$APP/Assets.car" > "$RUNNER_TEMP/asset-info.json"
+          python3 - <<'PY'
+          import json,os
+          data=json.load(open(os.environ["RUNNER_TEMP"]+"/asset-info.json"))
+          entries=[entry for entry in data if entry.get("Name")=="AppIcon"]
+          print(json.dumps(entries[:12],ensure_ascii=False)[:2200])
+          assert entries, "AppIcon asset not present in Assets.car"
+          PY
 
-      - name: Upload unsigned IPA
+      - name: Package verified unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -s "$APP/Assets.car"
+          find "$APP/PlugIns" -maxdepth 1 -name '*.appex' -type d | grep -q .
+          mkdir -p "$RUNNER_TEMP/Package/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Package/Payload/"
+          (cd "$RUNNER_TEMP/Package" && zip -qry "$GITHUB_WORKSPACE/SafariNight-v2-unsigned.ipa" Payload)
+          unzip -t "$GITHUB_WORKSPACE/SafariNight-v2-unsigned.ipa" | tail -n 1
+          unzip -l "$GITHUB_WORKSPACE/SafariNight-v2-unsigned.ipa" | grep -F '/Assets.car'
+          unzip -l "$GITHUB_WORKSPACE/SafariNight-v2-unsigned.ipa" | grep -F '/prepaint.css'
+          unzip -l "$GITHUB_WORKSPACE/SafariNight-v2-unsigned.ipa" | grep -F '/DarkReader-LICENSE.txt'
+
+      - name: Upload verified IPA
         uses: actions/upload-artifact@v4
         with:
-          name: SafariNight-unsigned-IPA
-          path: SafariNight-unsigned.ipa
+          name: SafariNight-v2-unsigned-IPA
+          path: SafariNight-v2-unsigned.ipa
           retention-days: 14
           if-no-files-found: error
