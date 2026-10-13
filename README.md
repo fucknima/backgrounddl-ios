@@ -1,3 +1,7 @@
+> **Safari 网页夜间模式现已更换为完整版 Dark Reader。** 请使用 [智夜 v3 完整 Safari 构建](https://github.com/fucknima/backgrounddl-ios/actions/workflows/build-safari-full.yml)。它集成上游完整浏览器扩展、网站规则库、iframe 和代理脚本；`SafariNightExtension/` 是已停用的旧版简化实验，不要再用于安装。
+>
+> **注意：** 首次安装仍需授予 Safari 网站访问权限；若旧版智夜仍开启，请先禁用旧版以避免两个夜间模式扩展同时处理同一网页。
+
 # 后台下载器（iOS 原生 SwiftUI 工程）
 
 ## 这是什么
