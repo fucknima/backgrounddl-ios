@@ -108,6 +108,11 @@ jobs:
             "$RUNNER_TEMP/AppIconAssets.xcassets"
           test -s "$RUNNER_TEMP/IconBuild/Assets.car"
           cp "$RUNNER_TEMP/IconBuild/Assets.car" "$APP/Assets.car"
+          # Host App welcome screen and its icon preview now both follow system appearance.
+          cp "$RUNNER_TEMP/ExtensionReady/AppIcon-Preview.png" "$APP/Icon.png"
+          cp "$RUNNER_TEMP/ExtensionReady/AppIcon-Preview-Dark.png" "$APP/Icon-Dark.png"
+          cp "$GITHUB_WORKSPACE/SafariNightExtension/HostMain.html" "$APP/Base.lproj/Main.html"
+          cp "$GITHUB_WORKSPACE/SafariNightExtension/HostStyle.css" "$APP/Style.css"
           export APP
           python3 - <<'PY'
           import os, plistlib
