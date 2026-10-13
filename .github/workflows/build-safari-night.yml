@@ -21,14 +21,23 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -version
-          xcrun --find safari-web-extension-packager
+          if xcrun --find safari-web-extension-packager >/dev/null 2>&1; then
+            echo "Using Safari web extension packager"
+          elif xcrun --find safari-web-extension-converter >/dev/null 2>&1; then
+            echo "Using legacy Safari web extension converter"
+          else
+            echo "::error::Neither Apple Safari Web Extension CLI is available with this Xcode"
+            exit 1
+          fi
           plutil -lint -s -r SafariNightExtension/manifest.json || python3 -m json.tool SafariNightExtension/manifest.json >/dev/null
 
       - name: Create official Safari Web Extension Xcode project
         shell: bash
         run: |
           set -euo pipefail
-          xcrun safari-web-extension-packager "$GITHUB_WORKSPACE/SafariNightExtension" \
+          TOOL=safari-web-extension-packager
+          xcrun --find "$TOOL" >/dev/null 2>&1 || TOOL=safari-web-extension-converter
+          xcrun "$TOOL" "$GITHUB_WORKSPACE/SafariNightExtension" \
             --project-location "$RUNNER_TEMP/SafariNightXcode" \
             --app-name "SafariNight" \
             --bundle-identifier "io.github.fucknima.safarinight" \
