@@ -1,0 +1,14 @@
+/*
+ * Earliest paint background only, no blanket inverse filter and no global
+ * display:none or overlay. Thus no page is held behind an invisible curtain.
+ * The running content script clears data-zny-resolved on completion/failure.
+ */
+@media (prefers-color-scheme: dark) {
+  html:not([data-zny-resolved]) {
+    background-color: #151922 !important;
+    color-scheme: dark;
+  }
+  html:not([data-zny-resolved]) body {
+    background-color: transparent !important;
+  }
+}
