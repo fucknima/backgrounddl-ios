@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "智夜 - Safari网页夜间模式",
+  "short_name": "智夜",
+  "version": "1.0.0",
+  "description": "沿用后台下载器的智能网页变暗方案。自动跟随系统，识别明亮网页，支持强制深色及网站例外。",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_title": "智夜 - 网页外观",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}
