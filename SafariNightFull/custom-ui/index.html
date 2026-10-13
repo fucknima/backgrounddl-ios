@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>智夜 · 网页外观</title>
+  <link rel="stylesheet" href="zhiye.css">
+  <script src="zhiye.js" defer></script>
+</head>
+<body>
+<main id="app" class="app" aria-busy="true">
+  <header class="brand">
+    <div class="mark" aria-hidden="true">
+      <span class="moon"></span><span class="smallstar"></span>
+    </div>
+    <div class="brand-copy">
+      <h1>智夜</h1>
+      <p>让每个网页，舒适一点</p>
+    </div>
+    <span class="version">V3.1</span>
+  </header>
+
+  <div class="summary">
+    <div class="summary-top">
+      <span class="summary-title">网页外观</span>
+      <span class="state" id="state"><span class="dot"></span><span id="stateText">正在连接</span></span>
+    </div>
+    <div class="mode-switch" role="group" aria-label="网页深色模式">
+      <button type="button" data-mode="auto" class="mode" aria-pressed="false">
+        <span class="mode-icon" aria-hidden="true">◐</span>
+        <span>自动</span>
+      </button>
+      <button type="button" data-mode="on" class="mode" aria-pressed="false">
+        <span class="mode-icon" aria-hidden="true">☾</span>
+        <span>深色</span>
+      </button>
+      <button type="button" data-mode="off" class="mode" aria-pressed="false">
+        <span class="mode-icon" aria-hidden="true">☀</span>
+        <span>关闭</span>
+      </button>
+    </div>
+    <p class="hint" id="modeHint">自动模式根据 iPhone 的深浅色外观切换。</p>
+  </div>
+
+  <section class="site panel" aria-label="当前网站">
+    <div class="site-copy">
+      <div class="section-heading">当前网站</div>
+      <div id="siteName" class="site-name" title="当前网站">正在读取网页…</div>
+      <p id="siteHint" class="subtle">可单独停用深色模式</p>
+    </div>
+    <label class="switch" title="仅切换当前网站">
+      <input type="checkbox" id="siteEnabled" aria-label="为当前网站开启夜间模式" disabled>
+      <span class="track"></span>
+    </label>
+  </section>
+
+  <section class="appearance panel" aria-label="显示调节">
+    <div class="panel-heading"><span>显示调节</span><span class="mini">即时生效</span></div>
+    <div class="control">
+      <div class="control-top"><label for="brightness">亮度</label><output id="brightnessValue" for="brightness">100%</output></div>
+      <input id="brightness" type="range" min="50" max="150" value="100" step="1" disabled>
+    </div>
+    <div class="control">
+      <div class="control-top"><label for="contrast">对比度</label><output id="contrastValue" for="contrast">100%</output></div>
+      <input id="contrast" type="range" min="50" max="150" value="100" step="1" disabled>
+    </div>
+    <button type="button" id="reset" class="reset" disabled>恢复默认</button>
+  </section>
+
+  <details id="advanced" class="advanced panel">
+    <summary><span>高级设置</span><span class="arrow" aria-hidden="true"></span></summary>
+    <div class="advanced-body">
+      <div class="field">
+        <label for="engine">主题渲染</label>
+        <select id="engine" disabled>
+          <option value="dynamicTheme">智能动态（推荐）</option>
+          <option value="staticTheme">静态规则</option>
+          <option value="cssFilter">滤镜模式</option>
+          <option value="svgFilter">SVG 滤镜</option>
+        </select>
+      </div>
+      <label class="row-setting" for="detectDark">
+        <span><strong>识别网站原生深色</strong><small>避免给已经变暗的网页重复处理</small></span>
+        <span class="switch small"><input id="detectDark" type="checkbox" disabled><span class="track"></span></span>
+      </label>
+      <p class="detail-note">使用 Dark Reader 的完整网页渲染引擎，复杂网站建议优先选「智能动态」。</p>
+    </div>
+  </details>
+
+  <div class="footer" aria-live="polite">
+    <span id="message">所有设置只保存在本设备的扩展数据中。</span>
+  </div>
+  <div class="credit">基于 Dark Reader 开源引擎 · 独立设计界面</div>
+</main>
+</body>
+</html>
