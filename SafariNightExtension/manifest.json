@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "智夜 - Safari网页夜间模式",
+  "name": "智夜 · Dark Reader",
   "short_name": "智夜",
-  "version": "1.0.0",
-  "description": "沿用后台下载器的智能网页变暗方案。自动跟随系统，识别明亮网页，支持强制深色及网站例外。",
+  "version": "2.0.0",
+  "description": "使用开源 Dark Reader 动态主题引擎，支持 Safari 自动深色、强制深色、站点例外。",
   "permissions": [
     "storage",
     "activeTab"
@@ -13,8 +13,20 @@
     "https://*/*"
   ],
   "action": {
-    "default_title": "智夜 - 网页外观",
-    "default_popup": "popup.html"
+    "default_title": "智夜 · Dark Reader",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon-16.png",
+      "32": "icon-32.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
   },
   "content_scripts": [
     {
@@ -22,11 +34,14 @@
         "http://*/*",
         "https://*/*"
       ],
+      "css": [
+        "prepaint.css"
+      ],
       "js": [
         "content.js"
       ],
       "run_at": "document_start",
-      "all_frames": false
+      "all_frames": true
     }
   ]
 }
