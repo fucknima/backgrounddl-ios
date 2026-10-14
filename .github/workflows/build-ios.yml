@@ -18,7 +18,7 @@ jobs:
         run: |
           xcodebuild -version
           xcodebuild -list -project BackgroundDL.xcodeproj
-          plutil -lint BackgroundDL.xcodeproj/project.pbxproj BackgroundDL/Info.plist BackgroundDLLiveActivity/Info.plist
+          plutil -lint BackgroundDL.xcodeproj/project.pbxproj BackgroundDL/Info.plist BackgroundDLLiveActivity/Info.plist BackgroundDLShareExtension/Info.plist BackgroundDL/BackgroundDL.entitlements BackgroundDLShareExtension/ShareExtension.entitlements
       - name: Build without code signing
         shell: bash
         run: |
@@ -32,6 +32,7 @@ jobs:
           test -d "$APP"
           test -d "$APP/PlugIns/BackgroundDLLiveActivityExtension.appex"
           test -f "$APP/PlugIns/BackgroundDLLiveActivityExtension.appex/BackgroundDLLiveActivityExtension"
+          test -f "$APP/PlugIns/BackgroundDLShareExtension.appex/BackgroundDLShareExtension"
           mkdir -p Payload
           cp -R "$APP" Payload/
           zip -qr BackgroundDL-unsigned.ipa Payload

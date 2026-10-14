@@ -1,14 +1,28 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var phase
+    @State private var selectedTab = 0
+    @State private var sharedURL: URL?
     var body: some View {
-        TabView {
-            NavigationStack { BrowserView() }
+        TabView(selection: $selectedTab) {
+            NavigationStack { BrowserView(sharedURL: sharedURL) }
                 .tabItem { Label("浏览器", systemImage: "safari") }
-            NavigationStack { DownloadListView() }
+                .tag(0)
+            NavigationStack { CompactDownloadListView() }
                 .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
+                .tag(1)
         }
         .tint(.cyan)
+        .onAppear(perform: takeSharedLink)
+        .onChange(of: phase) { _, next in
+            if next == .active { takeSharedLink() }
+        }
+    }
+    private func takeSharedLink() {
+        guard let next = SharedLinkInbox.takeNext() else { return }
+        sharedURL = next
+        selectedTab = 0
     }
 }
 

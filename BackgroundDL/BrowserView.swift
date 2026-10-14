@@ -14,6 +14,12 @@ final class BrowserState: ObservableObject {
     @Published var loadURL: URL?
     weak var webView: WKWebView?
 
+    func openSharedURL(_ url: URL) {
+        address = url.absoluteString
+        loadURL = url
+        webView?.load(URLRequest(url: url))
+    }
+
     func open() {
         let input = address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return }
@@ -45,6 +51,7 @@ final class BrowserState: ObservableObject {
 }
 
 struct BrowserView: View {
+    let sharedURL: URL?
     @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
@@ -172,6 +179,12 @@ struct BrowserView: View {
             .background(.regularMaterial)
         }
         .background(Color(uiColor: .systemBackground))
+        .onAppear {
+            if let sharedURL { state.openSharedURL(sharedURL) }
+        }
+        .onChange(of: sharedURL) { _, url in
+            if let url { state.openSharedURL(url) }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .alert("网页提示", isPresented: $state.showMessage) {
             Button("确定", role: .cancel) { }
