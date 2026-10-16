@@ -37,6 +37,29 @@ final class DownloadStore: ObservableObject {
         }
     }
 
+    // Reserve a distinct display name before a download starts. This covers concurrent
+    // tasks as well as files kept on disk after their history entry was removed.
+    func uniqueFilename(preferred: String) -> String {
+        let filename = preferred.trimmingCharacters(in: .whitespacesAndNewlines)
+        let original = filename.isEmpty ? "下载文件" : filename
+        var used = Set(items.map { $0.filename.lowercased() })
+        used.formUnion(items.compactMap { $0.savedFilename?.lowercased() })
+        if let diskNames = try? FileManager.default.contentsOfDirectory(atPath: Self.downloadFolder.path) {
+            used.formUnion(diskNames.map { $0.lowercased() })
+        }
+        guard used.contains(original.lowercased()) else { return original }
+        let ext = URL(fileURLWithPath: original).pathExtension
+        let base = ext.isEmpty
+            ? original
+            : String(original.dropLast(ext.count + 1))
+        var index = 1
+        while true {
+            let result = ext.isEmpty ? "\(base) (\(index))" : "\(base) (\(index)).\(ext)"
+            if !used.contains(result.lowercased()) { return result }
+            index += 1
+        }
+    }
+
     func add(_ item: DownloadItem) {
         items.insert(item, at: 0)
         // The first callback establishes a baseline; resumeData can already contain gigabytes.
@@ -49,7 +72,10 @@ final class DownloadStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].status = status
         items[index].errorMessage = message
-        if let savedFilename { items[index].savedFilename = savedFilename }
+        if let savedFilename {
+            items[index].savedFilename = savedFilename
+            items[index].filename = savedFilename
+        }
         if status == .completed, items[index].totalBytes > 0 {
             items[index].downloadedBytes = items[index].totalBytes
         }
