@@ -12,9 +12,25 @@ final class BrowserState: ObservableObject {
     @Published var showMessage = false
     @Published var notice = ""
     @Published var loadURL: URL?
+    @Published var isHome = true
     weak var webView: WKWebView?
 
+    func goHome() {
+        // Internal start page, not a third-party website; keep WebKit's cookie store.
+        webView?.stopLoading()
+        isHome = true
+        address = ""
+        loadURL = nil
+        currentTitle = "主页"
+        notice = ""
+        webView?.loadHTMLString(
+            "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>html,body{margin:0;height:100%;background:transparent}</style></head><body></body></html>",
+            baseURL: nil
+        )
+    }
+
     func openSharedURL(_ url: URL) {
+        isHome = false
         address = url.absoluteString
         loadURL = url
         webView?.load(URLRequest(url: url))
@@ -30,6 +46,7 @@ final class BrowserState: ObservableObject {
             report("请输入有效的 HTTPS 网址。")
             return
         }
+        isHome = false
         loadURL = url
         webView?.load(URLRequest(url: url))
     }
@@ -45,6 +62,7 @@ final class BrowserState: ObservableObject {
         isLoading = view.isLoading
         if let title = view.title, !title.isEmpty { currentTitle = title }
         if let url = view.url, url.scheme?.lowercased() == "https" {
+            isHome = false
             address = url.absoluteString
         }
     }
@@ -123,15 +141,17 @@ struct BrowserView: View {
             // Let the actual website occupy almost all vertical space.
             ZStack {
                 BrowserWebView(state: state, appearanceMode: webAppearanceMode)
-                if state.webView?.url == nil && state.loadURL == nil {
-                    ContentUnavailableView("打开网页", systemImage: "globe",
+                if state.isHome {
+                    ContentUnavailableView("浏览器主页", systemImage: "house",
                         description: Text("粘贴分享网址，在网页中点击下载。"))
                         .allowsHitTesting(false)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(spacing: 24) {
+            HStack(spacing: 18) {
+                Button { state.goHome() } label: { Image(systemName: "house") }
+                    .accessibilityLabel("返回主页")
                 Button { state.webView?.goBack() } label: { Image(systemName: "chevron.left") }
                     .disabled(!state.canGoBack)
                     .accessibilityLabel("返回")
@@ -149,7 +169,7 @@ struct BrowserView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .frame(maxWidth: 120, alignment: .trailing)
+                    .frame(maxWidth: 96, alignment: .trailing)
                 Menu {
                     Button {
                         webAppearanceMode = "auto"
