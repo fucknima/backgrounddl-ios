@@ -71,3 +71,9 @@
 - 新增 Share Extension：`BackgroundDLShareExtension.appex`，必须与主 App、灵动岛扩展一起签名。
 - **签名特别注意**：主 App 和 Share Extension 必须来自同一 Apple 开发团队，且都启用 App Group `group.com.example.backgrounddl.shared`，需要在开发者后台登记并配置两个标识符的配置描述文件。单纯重签 IPA、但签名不含此 App Group 权限时，可能无法安装，或系统分享虽然显示但数据不能交给主 App。
 - iOS 不保证分享扩展可以直接唤醒主 App。因此本版本在分享完成后提示打开主 App 接收链接，不采用违规的私有 API 强制跳转。
+
+## 1.6 · 浏览器主页与同名下载自动重命名
+
+- 浏览器底部新增“主页”图标：一键回到 App 内部的起始页面，不访问第三方站点，也不清除浏览器 Cookie。
+- 新任务加入下载队列时会检查当前任务名及 Downloads 文件夹已有文件，自动添加数字后缀，如 `mirror.rar`、`mirror (1).rar`、`mirror (2).rar`。
+- 下载结束时继续校验实际保存路径；遇到服务器提供新的文件名也不会覆盖同名文件。已完成的下载条目显示最终文件名。
