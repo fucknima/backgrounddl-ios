@@ -52,14 +52,15 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
 
     @MainActor
     func enqueue(request: URLRequest, originalURL: String, name: String, source: DownloadSource) {
+        let reservedName = DownloadStore.shared.uniqueFilename(preferred: Self.safeFilename(name))
         let item = DownloadItem(
-            id: UUID(), originalURL: originalURL, filename: name, source: source,
+            id: UUID(), originalURL: originalURL, filename: reservedName, source: source,
             status: .running, downloadedBytes: 0, totalBytes: -1,
             errorMessage: nil, savedFilename: nil, createdAt: Date(), resumeDataBase64: nil
         )
         DownloadStore.shared.add(item)
         let task = session.downloadTask(with: request)
-        task.taskDescription = TaskMarker(id: item.id, filename: name, source: source).text
+        task.taskDescription = TaskMarker(id: item.id, filename: reservedName, source: source).text
         task.resume()
     }
 
@@ -180,9 +181,15 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
             let directory = DownloadStore.downloadFolder
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: directory.path)
+            // Respect names reserved when tasks were enqueued (e.g. mirror (1).rar).
+            // For generic URL paths, still allow the server to provide the real name.
             var candidate = marker.filename
-            if let suggested = downloadTask.response?.suggestedFilename, !suggested.isEmpty, suggested != "download" {
-                candidate = suggested
+            if let suggested = downloadTask.response?.suggestedFilename,
+               !suggested.isEmpty, suggested.lowercased() != "download" {
+                let safeSuggestion = Self.safeFilename(suggested)
+                if !Self.isNameVariant(candidate, of: safeSuggestion) {
+                    candidate = safeSuggestion
+                }
             }
             candidate = Self.safeFilename(candidate)
             var destination = directory.appendingPathComponent(candidate)
@@ -251,6 +258,21 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
             DownloaderAppDelegate.backgroundCompletionHandler = nil
             handler?()
         }
+    }
+
+    private static func isNameVariant(_ candidate: String, of original: String) -> Bool {
+        if candidate.caseInsensitiveCompare(original) == .orderedSame { return true }
+        let url = URL(fileURLWithPath: original)
+        let ext = url.pathExtension
+        let stem = ext.isEmpty ? original : String(original.dropLast(ext.count + 1))
+        let prefix = "\(stem) ("
+        let suffix = ext.isEmpty ? ")" : ").\(ext)"
+        let lowered = candidate.lowercased()
+        guard lowered.hasPrefix(prefix.lowercased()), lowered.hasSuffix(suffix.lowercased()),
+              candidate.count > prefix.count + suffix.count else { return false }
+        let digits = candidate.dropFirst(prefix.count).dropLast(suffix.count)
+        guard let number = Int(digits) else { return false }
+        return number > 0
     }
 
     private static func safeFilename(_ name: String) -> String {
