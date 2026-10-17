@@ -16,21 +16,16 @@ final class BrowserState: ObservableObject {
     weak var webView: WKWebView?
 
     func goHome() {
-        // Internal start page, not a third-party website; keep WebKit's cookie store.
         webView?.stopLoading()
         isHome = true
         address = ""
         loadURL = nil
         currentTitle = "主页"
         notice = ""
-        webView?.loadHTMLString(
-            "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>html,body{margin:0;height:100%;background:transparent}</style></head><body></body></html>",
-            baseURL: nil
-        )
+        webView?.loadHTMLString("<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body></body></html>", baseURL: nil)
     }
 
-    func openSharedURL(_ url: URL) {
-        isHome = false
+    func loadSharedURL(_ url: URL) {
         address = url.absoluteString
         loadURL = url
         webView?.load(URLRequest(url: url))
@@ -142,7 +137,7 @@ struct BrowserView: View {
             ZStack {
                 BrowserWebView(state: state, appearanceMode: webAppearanceMode)
                 if state.isHome {
-                    ContentUnavailableView("浏览器主页", systemImage: "house",
+                    ContentUnavailableView("打开网页", systemImage: "globe",
                         description: Text("粘贴分享网址，在网页中点击下载。"))
                         .allowsHitTesting(false)
                 }
@@ -151,7 +146,7 @@ struct BrowserView: View {
 
             HStack(spacing: 18) {
                 Button { state.goHome() } label: { Image(systemName: "house") }
-                    .accessibilityLabel("返回主页")
+                    .accessibilityLabel("主页")
                 Button { state.webView?.goBack() } label: { Image(systemName: "chevron.left") }
                     .disabled(!state.canGoBack)
                     .accessibilityLabel("返回")
@@ -169,7 +164,7 @@ struct BrowserView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .frame(maxWidth: 96, alignment: .trailing)
+                    .frame(maxWidth: 120, alignment: .trailing)
                 Menu {
                     Button {
                         webAppearanceMode = "auto"
@@ -200,10 +195,10 @@ struct BrowserView: View {
         }
         .background(Color(uiColor: .systemBackground))
         .onAppear {
-            if let sharedURL { state.openSharedURL(sharedURL) }
+            if let sharedURL { state.loadSharedURL(sharedURL) }
         }
         .onChange(of: sharedURL) { _, url in
-            if let url { state.openSharedURL(url) }
+            if let url { state.loadSharedURL(url) }
         }
         .toolbar(.hidden, for: .navigationBar)
         .alert("网页提示", isPresented: $state.showMessage) {
@@ -499,7 +494,7 @@ private struct BrowserWebView: UIViewRepresentable {
                 let last = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
                 let fallback = last.isEmpty || last == "/" || last == "download" || last == "uc" ? "下载文件_\(UUID().uuidString.prefix(8))" : last
                 let name = (suggestedName?.isEmpty == false && suggestedName != "download") ? suggestedName! : fallback
-                BackgroundDownloader.shared.enqueue(request: request, originalURL: url.absoluteString, name: name, source: .browser)
+                DownloadCoordinator.shared.enqueue(request: request, originalURL: url.absoluteString, name: name, source: .browser)
                 state.notice = "已接管：\(name)。切到“下载”页查看速度、预计完成时间与进度。"
             }
         }

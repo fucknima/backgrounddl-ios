@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UserNotifications
 
 final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
     static let shared = BackgroundDownloader()
@@ -79,9 +80,10 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
                         pairs.append((marker.id, task.state == .suspended))
                     }
                 }
-                let active = Set(pairs.map(\.0))
+                let active = Set(pairs.map(\.0)).union(SegmentedDownloader.shared.activeIDs())
                 let paused = Set(pairs.filter(\.1).map(\.0))
                 DownloadStore.shared.reconcile(activeIDs: active, pausedIDs: paused)
+                DownloadRetryManager.shared.resumePending()
             }
         }
     }
@@ -142,6 +144,24 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
         DownloadStore.shared.update(id, status: .running)
     }
 
+    @MainActor
+    func retryExisting(id: UUID) {
+        guard let item = DownloadStore.shared.items.first(where: { $0.id == id }),
+              item.status != .cancelled, item.status != .completed else { return }
+        let task: URLSessionDownloadTask
+        if let data = DownloadStore.shared.resumeData(for: id) {
+            task = session.downloadTask(withResumeData: data)
+        } else if let url = URL(string: item.originalURL), url.scheme == "https" {
+            task = session.downloadTask(with: URLRequest(url: url))
+        } else {
+            DownloadStore.shared.update(id, status: .failed, message: "重试地址无效，请重新下载。")
+            return
+        }
+        task.taskDescription = TaskMarker(id: id, filename: item.filename, source: item.source).text
+        task.resume()
+        DownloadStore.shared.update(id, status: .running)
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
                     totalBytesExpectedToWrite: Int64) {
@@ -177,38 +197,34 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
             }
             return
         }
+        // Move out of URLSession's ephemeral path BEFORE returning from delegate.
+        // A crash between that move and the DB update can be repaired on next launch.
         do {
-            let directory = DownloadStore.downloadFolder
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: directory.path)
-            // Respect names reserved when tasks were enqueued (e.g. mirror (1).rar).
-            // For generic URL paths, still allow the server to provide the real name.
-            var candidate = marker.filename
-            if let suggested = downloadTask.response?.suggestedFilename,
-               !suggested.isEmpty, suggested.lowercased() != "download" {
-                let safeSuggestion = Self.safeFilename(suggested)
-                if !Self.isNameVariant(candidate, of: safeSuggestion) {
-                    candidate = safeSuggestion
-                }
-            }
-            candidate = Self.safeFilename(candidate)
-            var destination = directory.appendingPathComponent(candidate)
-            let base = destination.deletingPathExtension().lastPathComponent
-            let ext = destination.pathExtension
-            var n = 1
-            while FileManager.default.fileExists(atPath: destination.path) {
-                let renamed = ext.isEmpty ? "\(base) (\(n))" : "\(base) (\(n)).\(ext)"
-                destination = directory.appendingPathComponent(renamed)
-                n += 1
-            }
-            try FileManager.default.moveItem(at: location, to: destination)
-            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
+            let staging = DownloadStore.stagingFolder
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+            let target = staging.appendingPathComponent(marker.id.uuidString + ".stage")
+            if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
+            try FileManager.default.moveItem(at: location, to: target)
+            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: target.path)
+            let suggested = downloadTask.response?.suggestedFilename
             Task { @MainActor in
-                DownloadStore.shared.update(marker.id, status: .completed, savedFilename: destination.lastPathComponent)
+                guard !self.wasRemoved(marker.id),
+                      DownloadStore.shared.items.contains(where: { $0.id == marker.id }) else {
+                    try? FileManager.default.removeItem(at: target)
+                    return
+                }
+                do {
+                    try DownloadStore.shared.finalizeStagedDownload(id: marker.id, preferredName: suggested)
+                    DownloadNotifications.deliver(title: "下载完成", detail: marker.filename)
+                } catch {
+                    DownloadStore.shared.update(marker.id, status: .failed,
+                        message: "文件保存/校验失败：\(error.localizedDescription)，临时文件已保留。")
+                    DownloadNotifications.deliver(title: "下载保存失败", detail: marker.filename)
+                }
             }
         } catch {
             Task { @MainActor in
-                DownloadStore.shared.update(marker.id, status: .failed, message: "保存失败：\(error.localizedDescription)")
+                DownloadStore.shared.update(marker.id, status: .failed, message: "临时文件保存失败：\(error.localizedDescription)")
             }
         }
     }
@@ -217,9 +233,12 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
                     didCompleteWithError error: Error?) {
         guard let error, let marker = TaskMarker.decode(task.taskDescription) else { return }
         let ns = error as NSError
-        if ns.code == NSURLErrorCancelled { return }
+        if ns.code == NSURLErrorCancelled || wasRemoved(marker.id) { return }
         let resumeData = ns.userInfo["NSURLSessionDownloadTaskResumeData"] as? Data
         Task { @MainActor in
+            if DownloadRetryManager.shared.schedule(id: marker.id, error: ns, resumeData: resumeData) {
+                return
+            }
             let existing = DownloadStore.shared.items.first { $0.id == marker.id }
             guard let existing, existing.status != .cancelled,
                   existing.status != .paused, existing.status != .completed,
@@ -258,21 +277,6 @@ final class BackgroundDownloader: NSObject, URLSessionDownloadDelegate {
             DownloaderAppDelegate.backgroundCompletionHandler = nil
             handler?()
         }
-    }
-
-    private static func isNameVariant(_ candidate: String, of original: String) -> Bool {
-        if candidate.caseInsensitiveCompare(original) == .orderedSame { return true }
-        let url = URL(fileURLWithPath: original)
-        let ext = url.pathExtension
-        let stem = ext.isEmpty ? original : String(original.dropLast(ext.count + 1))
-        let prefix = "\(stem) ("
-        let suffix = ext.isEmpty ? ")" : ").\(ext)"
-        let lowered = candidate.lowercased()
-        guard lowered.hasPrefix(prefix.lowercased()), lowered.hasSuffix(suffix.lowercased()),
-              candidate.count > prefix.count + suffix.count else { return false }
-        let digits = candidate.dropFirst(prefix.count).dropLast(suffix.count)
-        guard let number = Int(digits) else { return false }
-        return number > 0
     }
 
     private static func safeFilename(_ name: String) -> String {

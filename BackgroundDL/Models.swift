@@ -27,6 +27,10 @@ struct DownloadItem: Identifiable, Codable {
     var resumeDataBase64: String?
     var speedBytesPerSecond: Double?
     var etaSeconds: TimeInterval?
+    var resumeFileName: String? = nil
+    var retries: Int? = nil
+    var nextRetryAt: Date? = nil
+    var lastProgressAt: Date? = nil
 
     var fraction: Double? {
         guard totalBytes > 0 else { return nil }
@@ -41,12 +45,14 @@ struct DownloadItem: Identifiable, Codable {
     }
 
     var speedLabel: String {
-        guard let speedBytesPerSecond, speedBytesPerSecond > 0 else { return "--" }
+        guard let speedBytesPerSecond, speedBytesPerSecond > 0,
+              lastProgressAt.map({ Date().timeIntervalSince($0) < 18 }) ?? false else { return "--" }
         return ByteCountFormatter.string(fromByteCount: Int64(speedBytesPerSecond), countStyle: .file) + "/s"
     }
 
     var etaLabel: String {
-        guard let etaSeconds, etaSeconds.isFinite, etaSeconds > 0 else { return "--" }
+        guard let etaSeconds, etaSeconds.isFinite, etaSeconds > 0,
+              lastProgressAt.map({ Date().timeIntervalSince($0) < 18 }) ?? false else { return "--" }
         let seconds = Int(etaSeconds.rounded())
         let h = seconds / 3600
         let m = (seconds % 3600) / 60

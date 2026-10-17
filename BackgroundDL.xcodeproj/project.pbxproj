@@ -6,11 +6,11 @@
 	objects = {
 /* Begin PBXContainerItemProxy section */
         7B266374E36A7AF389C5784C /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */; proxyType = 1; remoteGlobalIDString = 08D3C4123697F545CB505007; remoteInfo = BackgroundDLLiveActivityExtension; };
-    E50100000000000000000010 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */; proxyType = 1; remoteGlobalIDString = E50100000000000000000005 /* BackgroundDLShareExtension */; remoteInfo = BackgroundDLShareExtension; };
+        E50100000000000000000010 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */; proxyType = 1; remoteGlobalIDString = E50100000000000000000005 /* BackgroundDLShareExtension */; remoteInfo = BackgroundDLShareExtension; };
 /* End PBXContainerItemProxy section */
 /* Begin PBXTargetDependency section */
         920E0FAF4E1AEA36F099CAED /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 08D3C4123697F545CB505007 /* BackgroundDLLiveActivityExtension */; targetProxy = 7B266374E36A7AF389C5784C /* PBXContainerItemProxy */; };
-    E5010000000000000000000F /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = E50100000000000000000005 /* BackgroundDLShareExtension */; targetProxy = E50100000000000000000010 /* PBXContainerItemProxy */; };
+        E5010000000000000000000F /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = E50100000000000000000005 /* BackgroundDLShareExtension */; targetProxy = E50100000000000000000010 /* PBXContainerItemProxy */; };
 /* End PBXTargetDependency section */
 /* Begin PBXCopyFilesBuildPhase section */
         7AC3D671F9DA92ECEF78726B /* Embed App Extensions */ = {
@@ -36,10 +36,15 @@
 		E26B94345204CC4053130BDD /* DownloadStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64706E02A8AE6FFB54588D8 /* DownloadStore.swift */; };
 		F14092C66B0D9CBA53ADC684 /* BackgroundDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B91DDE9D7CF98E61B5264FE /* BackgroundDownloader.swift */; };
 		DB249DB9D0FF833647E29581 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 93FE83C6D4F6B073FBE750AE /* Assets.xcassets */; };
-    E50100000000000000000007 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50100000000000000000001 /* ShareViewController.swift */; };
-    E50100000000000000000008 /* BackgroundDLShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E50100000000000000000004 /* BackgroundDLShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-    E50100000000000000000012 /* SharedLinkInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50100000000000000000011 /* SharedLinkInbox.swift */; };
-    E50100000000000000000015 /* CompactDownloadListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50100000000000000000014 /* CompactDownloadListView.swift */; };
+        E50100000000000000000007 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50100000000000000000001 /* ShareViewController.swift */; };
+        E50100000000000000000008 /* BackgroundDLShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E50100000000000000000004 /* BackgroundDLShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+        E50100000000000000000012 /* SharedLinkInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50100000000000000000011 /* SharedLinkInbox.swift */; };
+        F91000000000000000000001 /* RangeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90000000000000000000001 /* RangeSupport.swift */; };
+        F91000000000000000000002 /* RangeProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90000000000000000000002 /* RangeProbe.swift */; };
+        F91000000000000000000003 /* SegmentedDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90000000000000000000003 /* SegmentedDownloader.swift */; };
+        F91000000000000000000004 /* DownloadCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90000000000000000000004 /* DownloadCoordinator.swift */; };
+        F91000000000000000000005 /* DownloadNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90000000000000000000005 /* DownloadNotifications.swift */; };
+        F91000000000000000000006 /* DownloadRetryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90000000000000000000006 /* DownloadRetryManager.swift */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
         C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadActivityAttributes.swift; sourceTree = "<group>"; };
@@ -56,13 +61,18 @@
 		93FE83C6D4F6B073FBE750AE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		17089704BF5954E6B87ED25A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		84337AD8D27FCD69AF2C4FC2 /* BackgroundDL.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BackgroundDL.app; sourceTree = BUILT_PRODUCTS_DIR; };
-    E50100000000000000000001 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
-    E50100000000000000000002 /* Share Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-    E50100000000000000000003 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
-    E50100000000000000000013 /* BackgroundDL.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BackgroundDL.entitlements; sourceTree = "<group>"; };
-    E50100000000000000000004 /* BackgroundDLShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BackgroundDLShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-    E50100000000000000000011 /* SharedLinkInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLinkInbox.swift; sourceTree = "<group>"; };
-    E50100000000000000000014 /* CompactDownloadListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactDownloadListView.swift; sourceTree = "<group>"; };
+        E50100000000000000000001 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+        E50100000000000000000002 /* Share Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+        E50100000000000000000003 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
+        E50100000000000000000013 /* BackgroundDL.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BackgroundDL.entitlements; sourceTree = "<group>"; };
+        E50100000000000000000004 /* BackgroundDLShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BackgroundDLShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+        E50100000000000000000011 /* SharedLinkInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLinkInbox.swift; sourceTree = "<group>"; };
+        F90000000000000000000001 /* RangeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RangeSupport.swift; sourceTree = "<group>"; };
+        F90000000000000000000002 /* RangeProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RangeProbe.swift; sourceTree = "<group>"; };
+        F90000000000000000000003 /* SegmentedDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentedDownloader.swift; sourceTree = "<group>"; };
+        F90000000000000000000004 /* DownloadCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadCoordinator.swift; sourceTree = "<group>"; };
+        F90000000000000000000005 /* DownloadNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadNotifications.swift; sourceTree = "<group>"; };
+        F90000000000000000000006 /* DownloadRetryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadRetryManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 /* Begin PBXFrameworksBuildPhase section */
 		424153ED3CD079DB4DB459AF /* Frameworks */ = {
@@ -71,7 +81,7 @@
             files = ();
             runOnlyForDeploymentPostprocessing = 0;
         };
-    E5010000000000000000000B /* Share Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        E5010000000000000000000B /* Share Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 /* Begin PBXGroup section */
         0FBDA3E3E6F668BE613E507F /* BackgroundDLLiveActivity */ = {
@@ -92,12 +102,17 @@
                 48E0F96C682DC1558B12A4D3 /* ContentView.swift */,
                 4F70A7C1B9004C13B6181991 /* BrowserView.swift */,
                 E50100000000000000000011 /* SharedLinkInbox.swift */,
-                E50100000000000000000014 /* CompactDownloadListView.swift */,
                 E50100000000000000000013 /* BackgroundDL.entitlements */,
                 C22586ABB49CABC9DB8DB398 /* Models.swift */,
                 B64706E02A8AE6FFB54588D8 /* DownloadStore.swift */,
                 6B91DDE9D7CF98E61B5264FE /* BackgroundDownloader.swift */,
                 C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */,
+                F90000000000000000000006 /* DownloadRetryManager.swift */,
+                F90000000000000000000005 /* DownloadNotifications.swift */,
+                F90000000000000000000004 /* DownloadCoordinator.swift */,
+                F90000000000000000000003 /* SegmentedDownloader.swift */,
+                F90000000000000000000002 /* RangeProbe.swift */,
+                F90000000000000000000001 /* RangeSupport.swift */,
                 2A0A7F8B7826CCE21CD2F00D /* DownloadActivityManager.swift */,
                 93FE83C6D4F6B073FBE750AE /* Assets.xcassets */,
                 17089704BF5954E6B87ED25A /* Info.plist */,
@@ -111,7 +126,7 @@
             name = Products;
             sourceTree = "<group>";
         };
-    E50100000000000000000006 /* BackgroundDLShareExtension */ = {isa = PBXGroup; children = (E50100000000000000000001 /* ShareViewController.swift */, E50100000000000000000002 /* Share Info.plist */, E50100000000000000000003 /* ShareExtension.entitlements */,); path = BackgroundDLShareExtension; sourceTree = "<group>"; };
+        E50100000000000000000006 /* BackgroundDLShareExtension */ = {isa = PBXGroup; children = (E50100000000000000000001 /* ShareViewController.swift */, E50100000000000000000002 /* Share Info.plist */, E50100000000000000000003 /* ShareExtension.entitlements */,); path = BackgroundDLShareExtension; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
         08D3C4123697F545CB505007 /* BackgroundDLLiveActivityExtension */ = {
@@ -136,17 +151,17 @@
             productReference = 84337AD8D27FCD69AF2C4FC2 /* BackgroundDL.app */;
             productType = "com.apple.product-type.application";
         };
-    E50100000000000000000005 /* BackgroundDLShareExtension */ = {
-        isa = PBXNativeTarget;
-        buildConfigurationList = E5010000000000000000000E /* Build configuration list for BackgroundDLShareExtension */;
-        buildPhases = (E50100000000000000000009 /* Sources */, E5010000000000000000000B /* Share Frameworks */, E5010000000000000000000A /* Resources */,);
-        buildRules = ();
-        dependencies = ();
-        name = BackgroundDLShareExtension;
-        productName = BackgroundDLShareExtension;
-        productReference = E50100000000000000000004 /* BackgroundDLShareExtension.appex */;
-        productType = "com.apple.product-type.app-extension";
-    };
+        E50100000000000000000005 /* BackgroundDLShareExtension */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = E5010000000000000000000E /* Build configuration list for BackgroundDLShareExtension */;
+            buildPhases = (E50100000000000000000009 /* Sources */, E5010000000000000000000B /* Share Frameworks */, E5010000000000000000000A /* Resources */,);
+            buildRules = ();
+            dependencies = ();
+            name = BackgroundDLShareExtension;
+            productName = BackgroundDLShareExtension;
+            productReference = E50100000000000000000004 /* BackgroundDLShareExtension.appex */;
+            productType = "com.apple.product-type.app-extension";
+        };
 /* End PBXNativeTarget section */
 /* Begin PBXProject section */
 		46F86FAA6BBF9AC94A7E4595 /* Project object */ = {
@@ -177,7 +192,7 @@
             files = (DB249DB9D0FF833647E29581 /* Assets.xcassets in Resources */,);
             runOnlyForDeploymentPostprocessing = 0;
         };
-    E5010000000000000000000A /* Share Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        E5010000000000000000000A /* Share Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
         9156AD8F53AEB5DC87228BA9 /* Sources */ = {
@@ -194,32 +209,37 @@
                 82FDB5029E6F8623BBAF7240 /* ContentView.swift in Sources */,
                 4F70A7C1B9004C13B6181990 /* BrowserView.swift in Sources */,
                 E50100000000000000000012 /* SharedLinkInbox.swift in Sources */,
-                E50100000000000000000015 /* CompactDownloadListView.swift in Sources */,
                 7FCA99F642FA2B3B5E5281AC /* Models.swift in Sources */,
                 E26B94345204CC4053130BDD /* DownloadStore.swift in Sources */,
                 F14092C66B0D9CBA53ADC684 /* BackgroundDownloader.swift in Sources */,
                 69E71F8DE03362F5A5CEC3FA /* DownloadActivityAttributes.swift in Sources */,
+                F91000000000000000000006 /* DownloadRetryManager.swift in Sources */,
+                F91000000000000000000005 /* DownloadNotifications.swift in Sources */,
+                F91000000000000000000004 /* DownloadCoordinator.swift in Sources */,
+                F91000000000000000000003 /* SegmentedDownloader.swift in Sources */,
+                F91000000000000000000002 /* RangeProbe.swift in Sources */,
+                F91000000000000000000001 /* RangeSupport.swift in Sources */,
                 3161D75259A524F88238F975 /* DownloadActivityManager.swift in Sources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
         };
-    E50100000000000000000009 /* Share Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (E50100000000000000000007 /* ShareViewController.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+        E50100000000000000000009 /* Share Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (E50100000000000000000007 /* ShareViewController.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 /* Begin XCBuildConfiguration section */
-        08419263F84A10D9B4D54DD4 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 6; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLLiveActivity/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.5; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
-        92BBEF5394AA0BA40BE11C2D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 6; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLLiveActivity/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.5; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+        08419263F84A10D9B4D54DD4 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 10; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLLiveActivity/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.9; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+        92BBEF5394AA0BA40BE11C2D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 10; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLLiveActivity/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.9; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
 		3BA1C82542E6F3B3503A9FB5 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; GCC_C_LANGUAGE_STANDARD = gnu17; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
 		85B903815B3C81A249BFFE93 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; GCC_C_LANGUAGE_STANDARD = gnu17; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
-		747623A7BD2A51E667E5A76D /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = BackgroundDL/BackgroundDL.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 6; DEVELOPMENT_ASSET_PATHS = ""; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDL/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.5; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
-		03F2D9C68906FCD933ACAFCF /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = BackgroundDL/BackgroundDL.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 6; DEVELOPMENT_ASSET_PATHS = ""; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDL/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.5; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
-    E5010000000000000000000C /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = BackgroundDLShareExtension/ShareExtension.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 6; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLShareExtension/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.5; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
-    E5010000000000000000000D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = BackgroundDLShareExtension/ShareExtension.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 6; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLShareExtension/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.5; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+		747623A7BD2A51E667E5A76D /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = BackgroundDL/BackgroundDL.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 10; DEVELOPMENT_ASSET_PATHS = ""; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDL/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.9; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+		03F2D9C68906FCD933ACAFCF /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = BackgroundDL/BackgroundDL.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 10; DEVELOPMENT_ASSET_PATHS = ""; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDL/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.9; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+        E5010000000000000000000C /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = BackgroundDLShareExtension/ShareExtension.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 10; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLShareExtension/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.9; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+        E5010000000000000000000D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = BackgroundDLShareExtension/ShareExtension.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 10; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BackgroundDLShareExtension/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.9; PRODUCT_BUNDLE_IDENTIFIER = com.example.backgrounddl.share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
         B916DFCFE53E9CEDFB3E6200 /* Build configuration list for PBXNativeTarget "BackgroundDLLiveActivityExtension" */ = {isa = XCConfigurationList; buildConfigurations = (08419263F84A10D9B4D54DD4 /* Debug */, 92BBEF5394AA0BA40BE11C2D /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		1F4E3D13C2320EDA50221924 /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (3BA1C82542E6F3B3503A9FB5, 85B903815B3C81A249BFFE93,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		354589B28580510B6EC24620 /* Build configuration list for PBXNativeTarget */ = {isa = XCConfigurationList; buildConfigurations = (747623A7BD2A51E667E5A76D, 03F2D9C68906FCD933ACAFCF,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-    E5010000000000000000000E /* Build configuration list for BackgroundDLShareExtension */ = {isa = XCConfigurationList; buildConfigurations = (E5010000000000000000000C /* Debug */, E5010000000000000000000D /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        E5010000000000000000000E /* Build configuration list for BackgroundDLShareExtension */ = {isa = XCConfigurationList; buildConfigurations = (E5010000000000000000000C /* Debug */, E5010000000000000000000D /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;

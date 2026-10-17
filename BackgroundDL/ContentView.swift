@@ -1,276 +1,219 @@
 import SwiftUI
+import QuickLook
+
+private enum MainTab: Hashable {
+    case browser, downloads
+}
 
 struct ContentView: View {
-    @Environment(\.scenePhase) private var phase
-    @State private var selectedTab = 0
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var selectedTab: MainTab = .browser
     @State private var sharedURL: URL?
+
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack { BrowserView(sharedURL: sharedURL) }
                 .tabItem { Label("浏览器", systemImage: "safari") }
-                .tag(0)
-            NavigationStack { CompactDownloadListView() }
+                .tag(MainTab.browser)
+            NavigationStack { DownloadListView() }
                 .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
-                .tag(1)
+                .tag(MainTab.downloads)
         }
         .tint(.cyan)
-        .onAppear(perform: takeSharedLink)
-        .onChange(of: phase) { _, next in
-            if next == .active { takeSharedLink() }
+        .onAppear(perform: acceptSharedLink)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { acceptSharedLink() }
         }
     }
-    private func takeSharedLink() {
-        guard let next = SharedLinkInbox.takeNext() else { return }
-        sharedURL = next
-        selectedTab = 0
+
+    private func acceptSharedLink() {
+        guard let url = SharedLinkInbox.takeNext() else { return }
+        sharedURL = url
+        selectedTab = .browser
+    }
+}
+
+private enum DownloadSort: String, CaseIterable {
+    case newest = "最新优先"
+    case oldest = "最早优先"
+    case name = "文件名"
+    case size = "文件大小"
+}
+
+private enum DownloadFilter: String, CaseIterable, Identifiable {
+    case all = "全部"
+    case active = "进行中"
+    case completed = "已完成"
+    var id: String { rawValue }
+    func includes(_ item: DownloadItem) -> Bool {
+        switch self {
+        case .all: return true
+        case .active: return item.status == .running || item.status == .paused || item.status == .failed
+        case .completed: return item.status == .completed
+        }
     }
 }
 
 private struct DownloadListView: View {
     @ObservedObject private var store = DownloadStore.shared
+    @State private var filter: DownloadFilter = .all
+    @State private var showClearCompleted = false
+    @State private var showDirectInput = false
     @State private var link = ""
-    @State private var isPreparing = false
+    @State private var searchText = ""
+    @State private var sortOrder: DownloadSort = .newest
+    @AppStorage("bgdl.downloadMode") private var downloadMode = "smart"
+    @AppStorage("bgdl.notifyDownloads") private var notifyDownloads = false
     @State private var alertMessage = ""
     @State private var showAlert = false
-    @State private var showClearCompleted = false
+
+    private var visibleItems: [DownloadItem] {
+        let candidates = store.items.filter { filter.includes($0) &&
+            (searchText.isEmpty || $0.filename.localizedCaseInsensitiveContains(searchText)) }
+        switch sortOrder {
+        case .newest: return candidates.sorted { $0.createdAt > $1.createdAt }
+        case .oldest: return candidates.sorted { $0.createdAt < $1.createdAt }
+        case .name: return candidates.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
+        case .size: return candidates.sorted { $0.totalBytes > $1.totalBytes }
+        }
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                DownloadOverviewCard(runningCount: store.runningCount,
-                                     completedCount: store.completedCount,
-                                     speedLabel: store.aggregateSpeedLabel)
-                if store.items.isEmpty {
-                    ContentUnavailableView("暂无下载任务", systemImage: "arrow.down.doc",
-                                           description: Text("去“浏览器”打开分享网页，直接点击网站自己的下载按钮。"))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
-                } else {
-                    VStack(spacing: 14) {
-                        HStack {
-                            Text("下载队列")
-                                .font(.title3.bold())
-                            Spacer()
-                            Text("共 \(store.items.count) 项")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(store.items) { item in
-                            DownloadRow(item: item,
-                                        fileURL: store.fileURL(for: item),
-                                        pause: { BackgroundDownloader.shared.changeState(id: item.id, action: .pause) },
-                                        resume: { BackgroundDownloader.shared.changeState(id: item.id, action: .resume) },
-                                        cancel: { BackgroundDownloader.shared.changeState(id: item.id, action: .cancel) },
-                                        retry: { Task { await retry(item) } },
-                                        remove: { deleteFile in try BackgroundDownloader.shared.remove(id: item.id, deleteFile: deleteFile) },
-                                        rename: { newName in try store.renameCompleted(id: item.id, to: newName) })
-                        }
-                    }
-                }
-
-                DisclosureGroup("手动添加 HTTPS 直链") {
-                    DirectLinkCard(link: $link, isPreparing: isPreparing) {
-                        Task { await addDownload() }
-                    }
-                    .padding(.top, 8)
+        List {
+            Section {
+                HStack(spacing: 10) {
+                    Label("\(store.runningCount) 项下载中", systemImage: "arrow.down.circle.fill")
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 4)
+                    Label(store.aggregateSpeedLabel, systemImage: "speedometer")
+                        .foregroundStyle(.secondary)
                 }
                 .font(.subheadline)
-                .padding(14)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .fontWeight(.medium)
+                .listRowBackground(Color.clear)
+                .padding(.vertical, 2)
 
-                Text("文件位置：文件 App → 在我的 iPhone 上 → 后台下载 → Downloads")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 4)
+                Picker("状态", selection: $filter) {
+                    ForEach(DownloadFilter.allCases) { choice in
+                        Text(choice.rawValue).tag(choice)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            if visibleItems.isEmpty {
+                Section {
+                    ContentUnavailableView(filter == .all ? "暂无下载" : "暂无相关任务",
+                                           systemImage: "arrow.down.doc",
+                                           description: Text("在浏览器中打开分享链接，点击网页下载即可。"))
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                }
+            } else {
+                Section {
+                    ForEach(visibleItems) { item in
+                        CompactDownloadRow(item: item,
+                                           fileURL: store.fileURL(for: item),
+                                           pause: { DownloadCoordinator.shared.changeState(id: item.id, action: .pause) },
+                                           resume: { DownloadCoordinator.shared.changeState(id: item.id, action: .resume) },
+                                           cancel: { DownloadCoordinator.shared.changeState(id: item.id, action: .cancel) },
+                                           retry: { retry(item) },
+                                           remove: { deleteFile in try DownloadCoordinator.shared.remove(id: item.id, deleteFile: deleteFile) },
+                                           rename: { name in try store.renameCompleted(id: item.id, to: name) })
+                    }
+                } header: {
+                    HStack {
+                        Text("下载任务")
+                        Spacer()
+                        Text("\(visibleItems.count) 项")
+                    }
+                } footer: {
+                    Text("左滑可暂停、继续或删除；长按任务可管理文件。")
+                }
+            }
         }
-        .background(background.ignoresSafeArea())
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("下载")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        showClearCompleted = true
-                    } label: {
-                        Label("清理已完成任务", systemImage: "checkmark.circle")
+                    Menu("下载模式") {
+                        ForEach(DownloadMode.allCases) { mode in
+                            Button {
+                                downloadMode = mode.rawValue
+                            } label: {
+                                Label(mode.label, systemImage: downloadMode == mode.rawValue ? "checkmark" : "circle")
+                            }
+                        }
                     }
-                    .disabled(store.completedCount == 0)
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("任务管理")
+                    Menu("排序方式") {
+                        ForEach(DownloadSort.allCases, id: \.self) { order in
+                            Button {
+                                sortOrder = order
+                            } label: {
+                                Label(order.rawValue, systemImage: sortOrder == order ? "checkmark" : "circle")
+                            }
+                        }
+                    }
+                    Toggle(isOn: $notifyDownloads) {
+                        Label("完成/失败通知", systemImage: "bell")
+                    }
+                    Button { showDirectInput = true } label: { Label("添加直链", systemImage: "plus") }
+                    Button { showClearCompleted = true } label: { Label("清理已完成记录", systemImage: "checkmark.circle") }
+                        .disabled(store.completedCount == 0)
+                } label: { Image(systemName: "ellipsis.circle") }
             }
         }
-        .confirmationDialog("清理已完成任务", isPresented: $showClearCompleted, titleVisibility: .visible) {
-            Button("只清理记录（保留文件）") {
-                clearCompleted(deleteFiles: false)
-            }
-            Button("清理记录并删除本地文件", role: .destructive) {
-                clearCompleted(deleteFiles: true)
-            }
+        .confirmationDialog("清理已完成下载", isPresented: $showClearCompleted) {
+            Button("仅移除记录") { clearCompleted(false) }
+            Button("连同本地文件一起删除", role: .destructive) { clearCompleted(true) }
             Button("取消", role: .cancel) { }
-        } message: {
-            Text("只清理记录不会删除“文件”App 中的下载文件。")
+        } message: { Text("默认保留已经下载到“文件”App 的文件。") }
+        .alert("添加 HTTPS 直链", isPresented: $showDirectInput) {
+            TextField("https://…", text: $link)
+                .textInputAutocapitalization(.never)
+            Button("开始下载") { startDirectDownload() }
+            Button("取消", role: .cancel) { }
+        } message: { Text("普通网页分享链接请从浏览器打开。") }
+        .alert("操作提示", isPresented: $showAlert) { Button("确定", role: .cancel) { } } message: { Text(alertMessage) }
+        .task { DownloadCoordinator.shared.reconnect() }
+        .onChange(of: notifyDownloads) { _, enabled in
+            if enabled { DownloadNotifications.requestPermission() }
         }
-        .alert("提示", isPresented: $showAlert) {
-            Button("确定", role: .cancel) { }
-        } message: {
-            Text(alertMessage)
-        }
-        .task { BackgroundDownloader.shared.reconnect() }
+        .searchable(text: $searchText, prompt: "搜索下载文件")
     }
 
-    private var background: some View {
-        LinearGradient(colors: [Color.cyan.opacity(0.16), Color.blue.opacity(0.08), Color(uiColor: .systemBackground)],
-                       startPoint: .top,
-                       endPoint: .bottom)
-    }
-
-    @MainActor
-    private func addDownload() async {
+    @MainActor private func startDirectDownload() {
         let raw = link.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return }
-        isPreparing = true
-        defer { isPreparing = false }
         guard let url = URL(string: raw), url.scheme?.lowercased() == "https", url.host != nil else {
-            show(DownloadError.invalidLink)
-            return
+            show(DownloadError.invalidLink); return
         }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 60
-        let basename = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
-        let name = basename.isEmpty || basename == "/" ? "下载文件_\(UUID().uuidString.prefix(8))" : basename
-        BackgroundDownloader.shared.enqueue(request: request, originalURL: raw, name: name, source: .direct)
+        let filename = url.lastPathComponent.isEmpty ? "下载文件" : url.lastPathComponent
+        DownloadCoordinator.shared.enqueue(request: URLRequest(url: url), originalURL: raw, name: filename, source: .direct)
         link = ""
     }
 
-    @MainActor
-    private func retry(_ item: DownloadItem) async {
-        if item.source == .browser {
-            show(DownloadError.unsupportedLink("网页登录下载依赖临时 Cookie/令牌。请返回浏览器页面重新点击下载按钮。"))
-            return
+    @MainActor private func retry(_ item: DownloadItem) {
+        guard item.source == .direct else {
+            show(DownloadError.unsupportedLink("此文件来自网页下载，请返回网页重新点击下载按钮。")); return
         }
-        guard let url = URL(string: item.originalURL), url.scheme?.lowercased() == "https", url.host != nil else {
-            show(DownloadError.invalidLink)
-            return
+        guard let url = URL(string: item.originalURL), url.scheme == "https" else {
+            show(DownloadError.invalidLink); return
         }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 60
-        BackgroundDownloader.shared.enqueue(request: request, originalURL: item.originalURL, name: item.filename, source: .direct)
+        DownloadCoordinator.shared.enqueue(request: URLRequest(url: url), originalURL: item.originalURL,
+                                             name: item.filename, source: .direct)
     }
 
-    @MainActor
-    private func clearCompleted(deleteFiles: Bool) {
-        do {
-            try store.clearCompleted(deleteFiles: deleteFiles)
-        } catch {
-            show(error)
-        }
+    @MainActor private func clearCompleted(_ deleteFiles: Bool) {
+        do { try store.clearCompleted(deleteFiles: deleteFiles) } catch { show(error) }
     }
-
-    private func show(_ error: Error) {
-        alertMessage = error.localizedDescription
-        showAlert = true
-    }
+    private func show(_ error: Error) { alertMessage = error.localizedDescription; showAlert = true }
 }
 
-private struct DownloadOverviewCard: View {
-    let runningCount: Int
-    let completedCount: Int
-    let speedLabel: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("下载概览")
-                        .font(.title2.bold())
-                    Text("后台传输 · 速度与剩余时间根据最新进度估算")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(.cyan)
-            }
-            HStack(spacing: 12) {
-                MetricPill(title: "进行中", value: "\(runningCount)", icon: "bolt.fill")
-                MetricPill(title: "已完成", value: "\(completedCount)", icon: "checkmark.circle.fill")
-                MetricPill(title: "总速度", value: speedLabel, icon: "speedometer")
-            }
-        }
-        .padding(18)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(.white.opacity(0.18))
-        }
-    }
-}
-
-private struct MetricPill: View {
-    let title: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: icon)
-                .foregroundStyle(.cyan)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline.monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-}
-
-private struct DirectLinkCard: View {
-    @Binding var link: String
-    let isPreparing: Bool
-    let action: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("备用直链")
-                .font(.headline)
-            TextField("粘贴 HTTPS 直链（可选）", text: $link, axis: .vertical)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .lineLimit(2...4)
-                .padding(14)
-                .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            Button(action: action) {
-                HStack {
-                    Label("开始后台下载", systemImage: "arrow.down.circle.fill")
-                    Spacer()
-                    if isPreparing { ProgressView() }
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isPreparing || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Text("更推荐用浏览器页：打开分享网页，直接点站点自己的下载按钮。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(16)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-    }
-}
-
-private struct DownloadRow: View {
+private struct CompactDownloadRow: View {
     let item: DownloadItem
     let fileURL: URL?
     let pause: () -> Void
@@ -280,168 +223,116 @@ private struct DownloadRow: View {
     let remove: (Bool) throws -> Void
     let rename: (String) throws -> Void
 
-    @State private var showDeleteConfirmation = false
+    @State private var showRemove = false
     @State private var deleteLocalFile = false
-    @State private var showRenameAlert = false
-    @State private var renameText = ""
-    @State private var operationError = ""
-    @State private var showOperationError = false
+    @State private var showRename = false
+    @State private var newName = ""
+    @State private var showError = false
+    @State private var errorText = ""
+    @State private var previewURL: URL?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "doc.zipper")
-                    .font(.title2)
-                    .foregroundStyle(item.status == .completed ? .green : .cyan)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top, spacing: 6) {
-                        Text(item.filename)
-                            .font(.headline)
-                            .lineLimit(2)
-                        Spacer(minLength: 0)
-                        Menu {
-                            if item.status == .completed {
-                                Button {
-                                    renameText = item.savedFilename ?? item.filename
-                                    showRenameAlert = true
-                                } label: {
-                                    Label("重命名文件", systemImage: "pencil")
-                                }
-                                if let fileURL {
-                                    ShareLink(item: fileURL) {
-                                        Label("分享文件", systemImage: "square.and.arrow.up")
-                                    }
-                                }
-                            }
-                            Button(role: .destructive) {
-                                deleteLocalFile = false
-                                showDeleteConfirmation = true
-                            } label: {
-                                Label(item.status == .running || item.status == .paused ? "取消并移除任务" : "仅移除下载记录", systemImage: "trash")
-                            }
-                            if item.status == .completed {
-                                Button(role: .destructive) {
-                                    deleteLocalFile = true
-                                    showDeleteConfirmation = true
-                                } label: {
-                                    Label("删除记录与本地文件", systemImage: "trash")
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 32, height: 30)
-                        }
-                        .accessibilityLabel("管理 \(item.filename)")
-                    }
-                    HStack(spacing: 8) {
-                        StatusChip(text: item.sourceLabel, tint: .gray)
-                        StatusChip(text: statusText, tint: statusTint)
-                        Spacer()
-                        if let progress = item.fraction {
-                            Text("\(Int(progress * 100))%")
-                                .font(.headline.monospacedDigit())
-                        }
+        HStack(alignment: .center, spacing: 11) {
+            Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "doc.zipper")
+                .font(.title2)
+                .foregroundStyle(item.status == .completed ? .green : .cyan)
+                .frame(width: 29)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.filename)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 2)
+                    if let progress = item.fraction, item.status == .running || item.status == .paused {
+                        Text("\(Int(progress * 100))%")
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
-            }
-
-            if item.status == .running || item.status == .paused || item.status == .completed {
-                VStack(alignment: .leading, spacing: 8) {
+                if item.status == .running || item.status == .paused {
                     ProgressView(value: item.fraction ?? 0)
                         .tint(.cyan)
-                    HStack {
+                        .frame(height: 4)
+                    HStack(spacing: 5) {
                         Text("\(item.downloadedBytes.readableSize) / \(item.totalBytes.readableSize)")
-                        Spacer()
-                        Text(item.createdAt, style: .time)
+                        Spacer(minLength: 4)
+                        Text(item.status == .paused ? "已暂停" : item.speedLabel)
+                        Text("·")
+                        Text(item.etaLabel)
                     }
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    if item.status == .running || item.status == .paused {
-                        HStack(spacing: 12) {
-                            InfoBadge(icon: "speedometer", text: item.speedLabel)
-                            InfoBadge(icon: "clock", text: item.etaLabel)
-                        }
-                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                } else {
+                    Text(item.status == .completed ? "已完成 · \(item.downloadedBytes.readableSize)" : (item.errorMessage ?? stateText))
+                        .font(.caption)
+                        .foregroundStyle(item.status == .failed ? .red : .secondary)
+                        .lineLimit(1)
                 }
             }
-
-            if let error = item.errorMessage, item.status == .failed {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            HStack(spacing: 10) {
-                switch item.status {
-                case .running:
-                    ActionButton(title: "暂停", icon: "pause.fill", tint: .orange, action: pause)
-                    ActionButton(title: "取消", icon: "xmark", tint: .red, action: cancel)
-                case .paused:
-                    ActionButton(title: "继续", icon: "play.fill", tint: .cyan, action: resume)
-                    ActionButton(title: "取消", icon: "xmark", tint: .red, action: cancel)
-                case .failed, .cancelled:
-                    ActionButton(title: "重试", icon: "arrow.clockwise", tint: .cyan, action: retry)
-                case .completed:
+            Menu {
+                if item.status == .running { Button("暂停", systemImage: "pause.fill", action: pause) }
+                if item.status == .paused { Button("继续", systemImage: "play.fill", action: resume) }
+                if item.status == .failed || item.status == .cancelled { Button("重试", systemImage: "arrow.clockwise", action: retry) }
+                if item.status == .running || item.status == .paused { Button("取消下载", systemImage: "xmark", role: .destructive, action: cancel) }
+                if item.status == .completed {
+                    Button { newName = item.savedFilename ?? item.filename; showRename = true } label: {
+                        Label("重命名", systemImage: "pencil")
+                    }
                     if let fileURL {
-                        ShareLink(item: fileURL) {
-                            Label("分享 / 存储", systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.cyan)
+                        Button { previewURL = fileURL } label: { Label("预览文件", systemImage: "eye") }
+                        ShareLink(item: fileURL) { Label("分享文件", systemImage: "square.and.arrow.up") }
                     }
                 }
-            }
-        }
-        .padding(16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(.white.opacity(0.16))
-        }
-        .confirmationDialog("确认移除？", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
-            Button(deleteLocalFile ? "删除记录与文件" : "移除记录", role: .destructive) {
-                do {
-                    try remove(deleteLocalFile)
-                } catch {
-                    operationError = error.localizedDescription
-                    showOperationError = true
+                Button { deleteLocalFile = false; showRemove = true } label: {
+                    Label("移除记录", systemImage: "trash")
                 }
+                if item.status == .completed {
+                    Button(role: .destructive) { deleteLocalFile = true; showRemove = true } label: {
+                        Label("删除文件和记录", systemImage: "trash.fill")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("管理 \(item.filename)")
+        }
+        .padding(.vertical, 5)
+        .contextMenu {
+            if item.status == .running { Button("暂停", action: pause) }
+            if item.status == .paused { Button("继续", action: resume) }
+            if item.status == .completed {
+                Button("重命名") { newName = item.savedFilename ?? item.filename; showRename = true }
+            }
+            Button("移除记录", role: .destructive) { deleteLocalFile = false; showRemove = true }
+        }
+        .swipeActions(edge: .trailing) {
+            Button("删除", role: .destructive) { deleteLocalFile = false; showRemove = true }
+            if item.status == .running { Button("暂停", action: pause).tint(.orange) }
+            if item.status == .paused { Button("继续", action: resume).tint(.cyan) }
+        }
+        .confirmationDialog("移除下载条目？", isPresented: $showRemove, titleVisibility: .visible) {
+            Button(deleteLocalFile ? "删除本地文件和记录" : "仅移除记录", role: .destructive) {
+                do { try remove(deleteLocalFile) } catch { report(error) }
             }
             Button("取消", role: .cancel) { }
-        } message: {
-            if item.status == .running || item.status == .paused {
-                Text("这会取消当前传输并删除下载记录。")
-            } else if deleteLocalFile {
-                Text("将永久删除保存在本机的文件，不能恢复。")
-            } else {
-                Text("仅删除列表记录，已下载的本地文件会保留。")
-            }
-        }
-        .alert("重命名已下载文件", isPresented: $showRenameAlert) {
-            TextField("新文件名", text: $renameText)
-            Button("保存") {
-                do {
-                    try rename(renameText)
-                } catch {
-                    operationError = error.localizedDescription
-                    showOperationError = true
-                }
-            }
+        } message: { Text(deleteLocalFile ? "文件将从设备永久删除。" : "本地已下载文件会保留；进行中的任务将停止。") }
+        .alert("重命名文件", isPresented: $showRename) {
+            TextField("文件名", text: $newName)
+            Button("保存") { do { try rename(newName) } catch { report(error) } }
             Button("取消", role: .cancel) { }
-        } message: {
-            Text("不会修改文件内容；不输入扩展名时保留原扩展名。")
         }
-        .alert("文件操作失败", isPresented: $showOperationError) {
-            Button("确定", role: .cancel) { }
-        } message: {
-            Text(operationError)
-        }
+        .quickLookPreview($previewURL)
+        .alert("操作失败", isPresented: $showError) { Button("确定", role: .cancel) {} } message: { Text(errorText) }
     }
 
-    private var statusText: String {
+    private var stateText: String {
         switch item.status {
         case .running: return "下载中"
         case .paused: return "已暂停"
@@ -450,59 +341,5 @@ private struct DownloadRow: View {
         case .cancelled: return "已取消"
         }
     }
-
-    private var statusTint: Color {
-        switch item.status {
-        case .running: return .cyan
-        case .paused: return .orange
-        case .completed: return .green
-        case .failed: return .red
-        case .cancelled: return .gray
-        }
-    }
-}
-
-private struct StatusChip: View {
-    let text: String
-    let tint: Color
-
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(tint.opacity(0.15), in: Capsule())
-            .foregroundStyle(tint)
-    }
-}
-
-private struct InfoBadge: View {
-    let icon: String
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-            Text(text)
-                .monospacedDigit()
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
-}
-
-private struct ActionButton: View {
-    let title: String
-    let icon: String
-    let tint: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: icon)
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
-        .tint(tint)
-    }
+    private func report(_ error: Error) { errorText = error.localizedDescription; showError = true }
 }
