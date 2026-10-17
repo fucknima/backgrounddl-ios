@@ -255,7 +255,7 @@ final class DownloadStore: ObservableObject {
         if let fileName = item.resumeFileName {
             return try? Data(contentsOf: Self.resumeFolder.appendingPathComponent(fileName))
         }
-        return item.resumeDataBase64.flatMap(Data.init(base64Encoded:))
+        return item.resumeDataBase64.flatMap { Data(base64Encoded: $0) }
     }
 
     func progress(_ id: UUID, written: Int64, expected: Int64) {
