@@ -197,6 +197,10 @@ private struct DownloadListView: View {
     }
 
     @MainActor private func retry(_ item: DownloadItem) {
+        if SegmentedDownloader.shared.contains(id: item.id) {
+            SegmentedDownloader.shared.retry(id: item.id)
+            return
+        }
         guard item.source == .direct else {
             show(DownloadError.unsupportedLink("此文件来自网页下载，请返回网页重新点击下载按钮。")); return
         }

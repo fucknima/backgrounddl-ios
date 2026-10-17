@@ -92,7 +92,7 @@ final class DownloadStore: ObservableObject {
            userInfo: [NSLocalizedDescriptionKey: "服务器没有返回有效文件数据。"] ) }
         // expected byte count can be -1 (unknown) and may also be stale from
         // before a server-side resumption. Only reject a clear short file.
-        if item.totalBytes > 0 && stagedSize < item.totalBytes {
+        if item.totalBytes > 0 && stagedSize != item.totalBytes {
             throw NSError(domain: "BackgroundDL", code: 2,
                userInfo: [NSLocalizedDescriptionKey: "文件长度不足：收到 \(stagedSize)，预期 \(item.totalBytes)。"])
         }

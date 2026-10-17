@@ -101,7 +101,9 @@ final class SegmentedDownloader: NSObject, URLSessionDownloadDelegate {
     func reconnect() {
         session.getAllTasks { tasks in
             Task { @MainActor in
-                let active = Set(tasks.compactMap { SegmentMarker.decode($0.taskDescription) }.map { "\($0.id.uuidString)/\($0.index)" })
+                let active = Set(tasks.filter { $0.state == .running || $0.state == .suspended }
+                    .compactMap { SegmentMarker.decode($0.taskDescription) }
+                    .map { "\($0.id.uuidString)/\($0.index)" })
                 for id in self.allIDs() {
                     guard let m = self.manifest(for: id) else { continue }
                     guard let record = DownloadStore.shared.items.first(where: { $0.id == id }),
@@ -132,6 +134,13 @@ final class SegmentedDownloader: NSObject, URLSessionDownloadDelegate {
                 }
             }
         }
+    }
+
+    // Retry only unfinished HTTP ranges; retain validated completed chunks.
+    func retry(id: UUID) {
+        guard manifest(for: id) != nil else { return }
+        DownloadStore.shared.update(id, status: .running)
+        reconnect()
     }
 
     func changeState(id: UUID, action: DownloadAction) {
