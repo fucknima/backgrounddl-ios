@@ -54,10 +54,16 @@ private enum DownloadFilter: String, CaseIterable, Identifiable {
     }
 }
 
+// Confirmation state belongs to the stable screen, never to a swiped or reordered row.
+private enum PendingDeletion {
+    case item(id: UUID, filename: String, deleteFile: Bool)
+    case completed
+}
+
 private struct DownloadListView: View {
     @ObservedObject private var store = DownloadStore.shared
     @State private var filter: DownloadFilter = .all
-    @State private var showClearCompleted = false
+    @State private var pendingDeletion: PendingDeletion?
     @State private var showDirectInput = false
     @State private var link = ""
     @State private var searchText = ""
@@ -118,7 +124,7 @@ private struct DownloadListView: View {
                                            resume: { DownloadCoordinator.shared.changeState(id: item.id, action: .resume) },
                                            cancel: { DownloadCoordinator.shared.changeState(id: item.id, action: .cancel) },
                                            retry: { retry(item) },
-                                           remove: { deleteFile in try DownloadCoordinator.shared.remove(id: item.id, deleteFile: deleteFile) },
+                                           requestRemove: { deleteFile in requestRemoval(id: item.id, filename: item.filename, deleteFile: deleteFile) },
                                            rename: { name in try store.renameCompleted(id: item.id, to: name) })
                     }
                 } header: {
@@ -162,16 +168,42 @@ private struct DownloadListView: View {
                         Label("完成/失败通知", systemImage: "bell")
                     }
                     Button { showDirectInput = true } label: { Label("添加直链", systemImage: "plus") }
-                    Button { showClearCompleted = true } label: { Label("清理已完成记录", systemImage: "checkmark.circle") }
+                    Button { pendingDeletion = .completed } label: { Label("清理已完成记录", systemImage: "checkmark.circle") }
                         .disabled(store.completedCount == 0)
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
-        .confirmationDialog("清理已完成下载", isPresented: $showClearCompleted) {
-            Button("仅移除记录") { clearCompleted(false) }
-            Button("连同本地文件一起删除", role: .destructive) { clearCompleted(true) }
-            Button("取消", role: .cancel) { }
-        } message: { Text("默认保留已经下载到“文件”App 的文件。") }
+        .confirmationDialog("确认操作", isPresented: Binding(
+            get: { pendingDeletion != nil },
+            set: { if !$0 { pendingDeletion = nil } }
+        ), titleVisibility: .visible) {
+            if let pendingDeletion {
+                switch pendingDeletion {
+                case .completed:
+                    Button("仅清理已完成记录") { self.pendingDeletion = nil; clearCompleted(false) }
+                    Button("连同已完成文件一起删除", role: .destructive) {
+                        self.pendingDeletion = nil
+                        clearCompleted(true)
+                    }
+                case .item(_, _, let deleteFile):
+                    Button(deleteFile ? "删除本地文件与记录" : "仅移除下载记录", role: .destructive) {
+                        confirmRemoval()
+                    }
+                }
+            }
+            Button("取消", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            if let pendingDeletion {
+                switch pendingDeletion {
+                case .completed:
+                    Text("清理任务记录默认不会删除下载好的本地文件。")
+                case .item(_, let filename, let deleteFile):
+                    Text(deleteFile
+                         ? "将永久删除“\(filename)”及其下载记录，此操作不可撤销。"
+                         : "移除“\(filename)”的任务记录；正在下载的任务将停止，已下载文件保留。")
+                }
+            }
+        }
         .alert("添加 HTTPS 直链", isPresented: $showDirectInput) {
             TextField("https://…", text: $link)
                 .textInputAutocapitalization(.never)
@@ -211,6 +243,21 @@ private struct DownloadListView: View {
                                              name: item.filename, source: .direct)
     }
 
+    @MainActor private func requestRemoval(id: UUID, filename: String, deleteFile: Bool) {
+        // Present on the next UI cycle, after swipe/menu animation has dismissed.
+        DispatchQueue.main.async {
+            pendingDeletion = .item(id: id, filename: filename, deleteFile: deleteFile)
+        }
+    }
+
+    @MainActor private func confirmRemoval() {
+        guard case let .item(id, _, deleteFile) = pendingDeletion else { return }
+        pendingDeletion = nil
+        // Resolve by UUID, not by an already-disposed List row.
+        do { try DownloadCoordinator.shared.remove(id: id, deleteFile: deleteFile) }
+        catch { show(error) }
+    }
+
     @MainActor private func clearCompleted(_ deleteFiles: Bool) {
         do { try store.clearCompleted(deleteFiles: deleteFiles) } catch { show(error) }
     }
@@ -224,11 +271,9 @@ private struct CompactDownloadRow: View {
     let resume: () -> Void
     let cancel: () -> Void
     let retry: () -> Void
-    let remove: (Bool) throws -> Void
+    let requestRemove: (Bool) -> Void
     let rename: (String) throws -> Void
 
-    @State private var showRemove = false
-    @State private var deleteLocalFile = false
     @State private var showRename = false
     @State private var newName = ""
     @State private var showError = false
@@ -290,11 +335,11 @@ private struct CompactDownloadRow: View {
                         ShareLink(item: fileURL) { Label("分享文件", systemImage: "square.and.arrow.up") }
                     }
                 }
-                Button { deleteLocalFile = false; showRemove = true } label: {
+                Button { requestRemove(false) } label: {
                     Label("移除记录", systemImage: "trash")
                 }
                 if item.status == .completed {
-                    Button(role: .destructive) { deleteLocalFile = true; showRemove = true } label: {
+                    Button(role: .destructive) { requestRemove(true) } label: {
                         Label("删除文件和记录", systemImage: "trash.fill")
                     }
                 }
@@ -314,19 +359,19 @@ private struct CompactDownloadRow: View {
             if item.status == .completed {
                 Button("重命名") { newName = item.savedFilename ?? item.filename; showRename = true }
             }
-            Button("移除记录", role: .destructive) { deleteLocalFile = false; showRemove = true }
+            Button("移除记录", role: .destructive) { requestRemove(false) }
         }
-        .swipeActions(edge: .trailing) {
-            Button("删除", role: .destructive) { deleteLocalFile = false; showRemove = true }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // This is a request, not an immediate destructive mutation.
+            // Do not use role: .destructive here: SwiftUI can animate/remove a row
+            // while the confirmation dialog is still being presented.
+            Button { requestRemove(false) } label: {
+                Label("删除", systemImage: "trash")
+            }
+            .tint(.red)
             if item.status == .running { Button("暂停", action: pause).tint(.orange) }
             if item.status == .paused { Button("继续", action: resume).tint(.cyan) }
         }
-        .confirmationDialog("移除下载条目？", isPresented: $showRemove, titleVisibility: .visible) {
-            Button(deleteLocalFile ? "删除本地文件和记录" : "仅移除记录", role: .destructive) {
-                do { try remove(deleteLocalFile) } catch { report(error) }
-            }
-            Button("取消", role: .cancel) { }
-        } message: { Text(deleteLocalFile ? "文件将从设备永久删除。" : "本地已下载文件会保留；进行中的任务将停止。") }
         .alert("重命名文件", isPresented: $showRename) {
             TextField("文件名", text: $newName)
             Button("保存") { do { try rename(newName) } catch { report(error) } }
