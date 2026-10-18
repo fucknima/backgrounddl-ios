@@ -339,7 +339,12 @@ final class DownloadStore: ObservableObject {
     func remove(id: UUID, deleteFile: Bool) throws {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         let item = items[index]
-        if deleteFile, item.status == .completed, let name = item.savedFilename {
+        if deleteFile, item.status == .completed {
+            // Never silently drop the task record if the physical file cannot
+            // be identified or removed. That caused misleading "deleted" UX.
+            guard let name = item.savedFilename, !name.isEmpty else {
+                throw DownloadFileError.fileMissing
+            }
             let folder = Self.downloadFolder.standardizedFileURL
             let file = folder.appendingPathComponent(name, isDirectory: false).standardizedFileURL
             guard file.deletingLastPathComponent() == folder else {
@@ -347,6 +352,10 @@ final class DownloadStore: ObservableObject {
             }
             if FileManager.default.fileExists(atPath: file.path) {
                 try FileManager.default.removeItem(at: file)
+            }
+            guard !FileManager.default.fileExists(atPath: file.path) else {
+                throw NSError(domain: "BackgroundDL", code: 91,
+                              userInfo: [NSLocalizedDescriptionKey: "本地文件仍然存在，下载记录已保留。"])
             }
         }
         items.remove(at: index)
