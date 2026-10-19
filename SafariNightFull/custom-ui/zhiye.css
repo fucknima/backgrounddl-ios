@@ -79,3 +79,15 @@ select{border:1px solid var(--edge);background:var(--bg);color:var(--text);borde
 .footer{padding:2px 3px;color:var(--soft);font-size:10px;line-height:1.4}
 .footer.error{color:#d44e56}
 .credit{text-align:center;color:var(--soft);font-size:9px;margin-top:0px}
+
+
+/* Original 智夜 Z-star identity and local permission guidance. */
+.logo{display:block;width:45px;height:45px;flex:none;border-radius:14px;box-shadow:0 7px 22px #18266718}
+.guide-button{width:100%;display:flex;align-items:center;justify-content:space-between;background:transparent;border:none;color:var(--accent);font-size:11px;font-weight:650;padding:1px 2px}
+.guide-arrow{font-size:14px;opacity:.8;transition:transform .2s}
+.guide-button[aria-expanded="true"] .guide-arrow{transform:rotate(90deg)}
+.permission-help{margin-top:10px;padding:15px;line-height:1.6}
+.permission-help[hidden]{display:none}
+.permission-help strong{font-size:13px}
+.permission-help p{margin:8px 0;font-size:11px;color:var(--soft)}
+.permission-help .permission-note{margin-top:12px;font-size:10px;color:var(--accent)}
