@@ -530,7 +530,7 @@ private struct BrowserWebView: UIViewRepresentable {
 
 // Browser history and bookmarks contain only user-visited HTTPS pages; cookies,
 // credentials and page contents are never written here.
-private struct BrowserEntry: Codable, Identifiable {
+struct BrowserEntry: Codable, Identifiable {
     let url: String
     var title: String
     var visited: Date
