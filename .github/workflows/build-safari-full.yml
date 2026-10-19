@@ -70,6 +70,17 @@ jobs:
           cp "$GITHUB_WORKSPACE/SafariNightFull/custom-ui/zhiye.css" "$EXT/ui/popup/zhiye.css"
           cp "$GITHUB_WORKSPACE/SafariNightFull/custom-ui/zhiye.js" "$EXT/ui/popup/zhiye.js"
           test -s "$EXT/ui/popup/zhiye.css"
+          # Upstream opens https://darkreader.org/help/<locale>/ on the install event.
+          # Strip only this external installation/uninstallation redirect and
+          # localize metadata. Never modify the styling engine or site fixes.
+          python3 "$GITHUB_WORKSPACE/SafariNightFull/localize_upstream.py" "$EXT"
+          grep -q "zh_CN" "$EXT/manifest.json"
+          if grep -Fq 'chrome.tabs.create({url: getHelpURL()});' "$EXT/background/index.js"; then
+            echo "::error::External Dark Reader help redirect still exists"; exit 1
+          fi
+          if grep -Fq 'chrome.runtime.setUninstallURL(UNINSTALL_URL);' "$EXT/background/index.js"; then
+            echo "::error::External Dark Reader uninstall redirect still exists"; exit 1
+          fi
           node --check "$EXT/ui/popup/zhiye.js"
           grep -q "ui-bg-get-data" "$EXT/ui/popup/zhiye.js"
           grep -q "ui-bg-set-theme" "$EXT/ui/popup/zhiye.js"
@@ -92,9 +103,16 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install pillow==11.3.0
-          python3 SafariNightExtension/generate_icons.py \
+          python3 SafariNightFull/generate_brand_icons.py \
             "$RUNNER_TEMP/ExtensionReady" "$RUNNER_TEMP/AppIconAssets.xcassets"
           test -s "$RUNNER_TEMP/ExtensionReady/AppIcon-Preview.png"
+          for icon in dr_16.png dr_48.png dr_128.png dr_active_19.png dr_active_38.png dr_active_light_19.png dr_active_light_38.png; do
+            test -s "$RUNNER_TEMP/ExtensionReady/icons/$icon"
+          done
+          test -s "$RUNNER_TEMP/ExtensionReady/ui/popup/zhiye-logo.png"
+          test -s "$RUNNER_TEMP/AppIconAssets.xcassets/AppIcon.appiconset/AppIcon-light.png"
+          test -s "$RUNNER_TEMP/AppIconAssets.xcassets/AppIcon.appiconset/AppIcon-dark.png"
+          test -s "$RUNNER_TEMP/AppIconAssets.xcassets/AppIcon.appiconset/AppIcon-tinted.png"
 
       - name: Convert official browser extension into Safari iOS host
         shell: bash
@@ -156,14 +174,18 @@ jobs:
           data.update({k:v for k,v in partial.items() if k in ('CFBundleIcons','CFBundleIcons~ipad','CFBundleIconName')})
           data.setdefault("CFBundleIcons",{"CFBundlePrimaryIcon":{"CFBundleIconName":"AppIcon"}})
           data["CFBundleDisplayName"]="智夜"
-          data["CFBundleShortVersionString"]="3.1.0"
-          data["CFBundleVersion"]="4"
+          data["CFBundleDevelopmentRegion"]="zh_CN"
+          data["CFBundleShortVersionString"]="3.2.0"
+          data["CFBundleVersion"]="5"
           p.write_bytes(plistlib.dumps(data))
           ext=list((app/"PlugIns").glob("*.appex"))
           assert len(ext)==1, f"Expected one Safari extension, got {len(ext)}"
           ep=ext[0]/"Info.plist"
           ei=plistlib.loads(ep.read_bytes())
-          ei["CFBundleDisplayName"]="智夜 · Dark Reader"
+          ei["CFBundleDisplayName"]="智夜 · 网页夜间模式"
+          ei["CFBundleDevelopmentRegion"]="zh_CN"
+          ei["CFBundleShortVersionString"]="3.2.0"
+          ei["CFBundleVersion"]="5"
           ep.write_bytes(plistlib.dumps(ei))
           paths=[
             "manifest.json","inject/index.js","inject/fallback.js","inject/proxy.js",
@@ -174,6 +196,18 @@ jobs:
           assert "让每个网页，舒适一点" in custom.read_text(), "Original UI not installed"
           assert (ext[0]/"ui/popup/zhiye.js").exists()
           assert (ext[0]/"ui/popup/zhiye.css").exists()
+
+          assert (ext[0]/"ui/popup/zhiye-logo.png").exists()
+          assert "Safari 网站权限怎么开启" in custom.read_text()
+          b=(ext[0]/"background/index.js").read_text()
+          assert "chrome.tabs.create({url: getHelpURL()});" not in b
+          assert "chrome.runtime.setUninstallURL(UNINSTALL_URL);" not in b
+          import json
+          m=json.loads((ext[0]/"manifest.json").read_text())
+          assert m["default_locale"]=="zh_CN" and m["version"]=="3.2.0"
+          assert m["action"]["default_popup"]=="ui/popup/index.html"
+          for fn in ["dr_16.png","dr_48.png","dr_128.png","dr_active_19.png","dr_active_38.png","dr_active_light_19.png","dr_active_light_38.png"]:
+              assert (ext[0]/"icons"/fn).stat().st_size>200
           manifest=(ext[0]/"manifest.json").read_text()
           assert "智夜" in manifest
           print("Official full extension and host app verified")
