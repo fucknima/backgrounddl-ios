@@ -2,7 +2,7 @@ import SwiftUI
 import QuickLook
 
 private enum MainTab: Hashable {
-    case browser, downloads
+    case browser, downloads, files, settings
 }
 
 struct ContentView: View {
@@ -18,6 +18,12 @@ struct ContentView: View {
             NavigationStack { DownloadListView() }
                 .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
                 .tag(MainTab.downloads)
+            NavigationStack { LocalDownloadFilesView(showCloseButton: false) }
+                .tabItem { Label("文件", systemImage: "folder") }
+                .tag(MainTab.files)
+            NavigationStack { DownloadSettingsView() }
+                .tabItem { Label("设置", systemImage: "gearshape") }
+                .tag(MainTab.settings)
         }
         .tint(.cyan)
         .onAppear(perform: acceptSharedLink)
@@ -55,14 +61,21 @@ private enum DownloadFilter: String, CaseIterable, Identifiable {
 }
 
 // Confirmation state belongs to the stable screen, never to a swiped or reordered row.
-private enum PendingDeletion {
-    case item(id: UUID, filename: String, deleteFile: Bool)
+private struct PendingDeletion {
+    let id: UUID
+    let filename: String
+    let deleteFile: Bool
+}
+
+private struct DetailSelection: Identifiable {
+    let id: UUID
 }
 
 private struct DownloadListView: View {
     @ObservedObject private var store = DownloadStore.shared
     @State private var filter: DownloadFilter = .all
     @State private var pendingDeletion: PendingDeletion?
+    @State private var selectedDetail: DetailSelection?
     @State private var showClearCompleted = false
     @State private var showLocalFiles = false
     @State private var showDirectInput = false
@@ -126,8 +139,7 @@ private struct DownloadListView: View {
                                            cancel: { DownloadCoordinator.shared.changeState(id: item.id, action: .cancel) },
                                            retry: { retry(item) },
                                            requestRemove: { deleteFile in requestRemoval(id: item.id, filename: item.filename, deleteFile: deleteFile) },
-                                           pendingDeletion: $pendingDeletion,
-                                           confirmRemoval: confirmRemoval,
+                                           openDetails: { selectedDetail = DetailSelection(id: item.id) },
                                            rename: { name in try store.renameCompleted(id: item.id, to: name) })
                     }
                 } header: {
@@ -177,14 +189,30 @@ private struct DownloadListView: View {
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
-        // Bulk cleanup is a screen-level operation. Item confirmations are anchored
-        // to their individual row with a genuine popover (see CompactDownloadRow).
-        .confirmationDialog("清理已完成下载", isPresented: $showClearCompleted, titleVisibility: .visible) {
-            Button("仅清理已完成记录") { clearCompleted(false) }
-            Button("连同已完成文件一起删除", role: .destructive) { clearCompleted(true) }
-            Button("取消", role: .cancel) { }
+        .confirmationDialog("清理已完成下载", isPresented: $showClearCompleted) {
+            Button("仅清理记录") { clearCompleted(false) }
+            Button("删除本地文件与记录", role: .destructive) { clearCompleted(true) }
+            Button("取消", role: .cancel) {}
         } message: {
-            Text("默认保留已经下载到“文件”App 的本地文件。")
+            Text("清理记录不删除本地文件，删除文件后不可恢复。")
+        }
+        .sheet(isPresented: Binding(
+            get: { pendingDeletion != nil },
+            set: { if !$0 { pendingDeletion = nil } }
+        )) {
+            if let pendingDeletion {
+                DownloadDeleteSheet(
+                    filename: pendingDeletion.filename,
+                    deleteFileAvailable: pendingDeletion.deleteFile,
+                    remove: { removeLocalFile in confirmRemoval(deleteFile: removeLocalFile) },
+                    cancel: { self.pendingDeletion = nil }
+                )
+                .presentationDetents([.height(290)])
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .sheet(item: $selectedDetail) { selection in
+            NavigationStack { DownloadDetailView(itemID: selection.id) }
         }
         .alert("添加 HTTPS 直链", isPresented: $showDirectInput) {
             TextField("https://…", text: $link)
@@ -229,19 +257,17 @@ private struct DownloadListView: View {
     }
 
     @MainActor private func requestRemoval(id: UUID, filename: String, deleteFile: Bool) {
-        // Let the swipe action or context menu fully close before presenting a
-        // row-anchored popover; do not attach a dialog to the transient swipe button.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.17) {
             guard store.items.contains(where: { $0.id == id }) else { return }
-            pendingDeletion = .item(id: id, filename: filename, deleteFile: deleteFile)
+            pendingDeletion = PendingDeletion(id: id, filename: filename, deleteFile: deleteFile)
         }
     }
 
-    @MainActor private func confirmRemoval() {
-        guard case let .item(id, _, deleteFile) = pendingDeletion else { return }
-        // Dismiss the native popover before removing its presenting row.
+    @MainActor private func confirmRemoval(deleteFile: Bool) {
+        guard let id = pendingDeletion?.id else { return }
         pendingDeletion = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+        // Dismiss the stable sheet before mutating the underlying List.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
             guard store.items.contains(where: { $0.id == id }) else { return }
             do { try DownloadCoordinator.shared.remove(id: id, deleteFile: deleteFile) }
             catch { show(error) }
@@ -262,8 +288,7 @@ private struct CompactDownloadRow: View {
     let cancel: () -> Void
     let retry: () -> Void
     let requestRemove: (Bool) -> Void
-    @Binding var pendingDeletion: PendingDeletion?
-    let confirmRemoval: () -> Void
+    let openDetails: () -> Void
     let rename: (String) throws -> Void
 
     @State private var showRename = false
@@ -313,7 +338,10 @@ private struct CompactDownloadRow: View {
                         .lineLimit(1)
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: openDetails)
             Menu {
+                Button { openDetails() } label: { Label("任务详情", systemImage: "info.circle") }
                 if item.status == .running { Button("暂停", systemImage: "pause.fill", action: pause) }
                 if item.status == .paused { Button("继续", systemImage: "play.fill", action: resume) }
                 if item.status == .failed || item.status == .cancelled { Button("重试", systemImage: "arrow.clockwise", action: retry) }
@@ -367,30 +395,6 @@ private struct CompactDownloadRow: View {
             if item.status == .running { Button("暂停", action: pause).tint(.orange) }
             if item.status == .paused { Button("继续", action: resume).tint(.cyan) }
         }
-        // Attachment is the stable ForEach row, not the ephemeral swipe-action
-        // control or the top navigation toolbar. Parent owns the state.
-        .popover(isPresented: Binding(
-            get: {
-                if case .item(let id, _, _) = pendingDeletion { return id == item.id }
-                return false
-            },
-            set: { presented in
-                guard !presented else { return }
-                if case .item(let id, _, _) = pendingDeletion, id == item.id {
-                    pendingDeletion = nil
-                }
-            }
-        ), attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
-            if case let .item(id, filename, deleteFile) = pendingDeletion, id == item.id {
-                DownloadDeletionPopover(
-                    filename: filename,
-                    deleteFile: deleteFile,
-                    onConfirm: confirmRemoval,
-                    onCancel: { pendingDeletion = nil }
-                )
-                .presentationCompactAdaptation(.popover)
-            }
-        }
         .alert("重命名文件", isPresented: $showRename) {
             TextField("文件名", text: $newName)
             Button("保存") { do { try rename(newName) } catch { report(error) } }
@@ -412,51 +416,27 @@ private struct CompactDownloadRow: View {
     private func report(_ error: Error) { errorText = error.localizedDescription; showError = true }
 }
 
-private struct DownloadDeletionPopover: View {
-    let filename: String
-    let deleteFile: Bool
-    let onConfirm: () -> Void
-    let onCancel: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(deleteFile ? "删除下载文件？" : "移除下载记录？", systemImage: "trash")
-                .font(.headline)
-            Text(filename)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(2)
-                .truncationMode(.middle)
-            Text(deleteFile
-                 ? "将永久删除本地文件及记录，此操作不可撤销。"
-                 : "保留已下载文件，仅移除列表记录。正在运行的任务会停止。")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(role: .destructive, action: onConfirm) {
-                Text(deleteFile ? "删除文件与记录" : "确认移除记录")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            Button("取消", action: onCancel)
-                .font(.subheadline)
-                .frame(maxWidth: .infinity)
-        }
-        .padding(18)
-        .frame(width: 300)
-    }
-}
-
-
 private struct LocalDownloadFile: Identifiable {
     let url: URL
     let bytes: Int64
     let recorded: Bool
     var id: URL { url }
     var filename: String { url.lastPathComponent }
+    var modified: Date {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+    var category: String {
+        switch url.pathExtension.lowercased() {
+        case "zip", "rar", "7z", "tar", "gz", "xz", "iso": return "压缩包"
+        case "mp4", "mov", "mkv", "avi", "mp3", "m4a", "flac": return "音视频"
+        case "jpg", "jpeg", "png", "gif", "webp", "heic": return "图片"
+        default: return "其他"
+        }
+    }
 }
 
-private struct LocalDownloadFilesView: View {
+struct LocalDownloadFilesView: View {
+    var showCloseButton = true
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = DownloadStore.shared
     @State private var files: [LocalDownloadFile] = []
@@ -464,6 +444,30 @@ private struct LocalDownloadFilesView: View {
     @State private var deletionError = ""
     @State private var showError = false
     @State private var previewURL: URL?
+    @State private var searchText = ""
+    @State private var sortBy = "date"
+    @State private var category = "全部"
+    @State private var isSelecting = false
+    @State private var selectedFiles = Set<URL>()
+    @State private var confirmBatchDelete = false
+    @State private var renameTarget: LocalDownloadFile?
+    @State private var newFilename = ""
+    @State private var showRename = false
+
+    private var visibleFiles: [LocalDownloadFile] {
+        let filtered = files.filter { file in
+            (category == "全部" || file.category == category) &&
+            (searchText.isEmpty || file.filename.localizedCaseInsensitiveContains(searchText))
+        }
+        switch sortBy {
+        case "name":
+            return filtered.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
+        case "size":
+            return filtered.sorted { $0.bytes > $1.bytes }
+        default:
+            return filtered.sorted { $0.modified > $1.modified }
+        }
+    }
 
     var body: some View {
         List {
@@ -478,53 +482,111 @@ private struct LocalDownloadFilesView: View {
             } footer: {
                 Text("此处直接读取“文件”App → 在我的 iPhone 上 → 后台下载 → Downloads，包括记录已移除但仍保存在设备上的文件。")
             }
-            if files.isEmpty {
-                ContentUnavailableView("暂无本地下载文件", systemImage: "folder",
-                                       description: Text("下载完成后的文件会显示在这里。"))
+            Section {
+                Picker("文件类型", selection: $category) {
+                    ForEach(["全部", "压缩包", "音视频", "图片", "其他"], id: \.self) { type in
+                        Text(type).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .listRowBackground(Color.clear)
+
+            if visibleFiles.isEmpty {
+                ContentUnavailableView(searchText.isEmpty ? "暂无本地文件" : "没有匹配的文件",
+                    systemImage: "folder", description: Text("下载完成后的文件会保存在这里。"))
             } else {
-                Section("下载文件") {
-                    ForEach(files) { file in
+                Section("本地文件") {
+                    ForEach(visibleFiles) { file in
                         HStack(spacing: 12) {
-                            Image(systemName: "doc.fill")
-                                .foregroundStyle(.cyan)
-                                .frame(width: 24)
+                            if isSelecting {
+                                Button {
+                                    if selectedFiles.contains(file.url) {
+                                        selectedFiles.remove(file.url)
+                                    } else {
+                                        selectedFiles.insert(file.url)
+                                    }
+                                } label: {
+                                    Image(systemName: selectedFiles.contains(file.url) ? "checkmark.circle.fill" : "circle")
+                                        .font(.title3).foregroundStyle(.cyan)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                Image(systemName: file.category == "压缩包" ? "doc.zipper" : "doc.fill")
+                                    .foregroundStyle(.cyan).frame(width: 24)
+                            }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(file.filename)
                                     .font(.subheadline.weight(.medium))
                                     .lineLimit(2)
                                     .truncationMode(.middle)
-                                Text("\(file.bytes.readableSize) · \(file.recorded ? "有下载记录" : "无对应记录")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                Text("\(file.bytes.readableSize) · \(file.recorded ? "有记录" : "无记录")")
+                                    .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer(minLength: 4)
-                            Button { previewURL = file.url } label: {
-                                Image(systemName: "eye")
-                                    .frame(width: 32, height: 40)
+                            if !isSelecting {
+                                Menu {
+                                    Button { previewURL = file.url } label: {
+                                        Label("预览", systemImage: "eye")
+                                    }
+                                    ShareLink(item: file.url) {
+                                        Label("分享 / 存储到文件", systemImage: "square.and.arrow.up")
+                                    }
+                                    Button {
+                                        renameTarget = file
+                                        newFilename = file.filename
+                                        showRename = true
+                                    } label: { Label("重命名", systemImage: "pencil") }
+                                    Button(role: .destructive) {
+                                        pendingDelete = file
+                                    } label: { Label("永久删除", systemImage: "trash") }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
+                                        .font(.title3).frame(width: 36, height: 38)
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("预览 \(file.filename)")
-                            Button { pendingDelete = file } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
-                                    .frame(width: 32, height: 40)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("删除 \(file.filename)")
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 5)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if isSelecting {
+                                if selectedFiles.contains(file.url) { selectedFiles.remove(file.url) }
+                                else { selectedFiles.insert(file.url) }
+                            } else { previewURL = file.url }
+                        }
                     }
                 }
             }
         }
-        .navigationTitle("本地文件")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("文件")
+        .navigationBarTitleDisplayMode(showCloseButton ? .inline : .large)
+        .searchable(text: $searchText, prompt: "搜索文件")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("刷新", systemImage: "arrow.clockwise") { reload() }
+                Menu {
+                    Button("按日期排序") { sortBy = "date" }
+                    Button("按名称排序") { sortBy = "name" }
+                    Button("按大小排序") { sortBy = "size" }
+                    Button("刷新") { reload() }
+                } label: { Image(systemName: "arrow.up.arrow.down") }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("完成") { dismiss() }
+                Button(isSelecting ? "完成" : "选择") {
+                    isSelecting.toggle()
+                    if !isSelecting { selectedFiles.removeAll() }
+                }
+            }
+            if showCloseButton {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+            if isSelecting && !selectedFiles.isEmpty {
+                ToolbarItem(placement: .bottomBar) {
+                    Button("删除所选（\(selectedFiles.count)）", role: .destructive) {
+                        confirmBatchDelete = true
+                    }
+                }
             }
         }
         .onAppear(perform: reload)
@@ -541,6 +603,17 @@ private struct LocalDownloadFilesView: View {
             Button("确定", role: .cancel) { }
         } message: {
             Text(deletionError)
+        }
+
+        .confirmationDialog("永久删除所选文件？", isPresented: $confirmBatchDelete) {
+            Button("删除 \(selectedFiles.count) 个文件", role: .destructive) {
+                deleteSelected()
+            }
+        } message: { Text("这些文件不会进入“最近删除”，相关下载记录也会移除。") }
+        .alert("重命名本地文件", isPresented: $showRename) {
+            TextField("文件名", text: $newFilename)
+            Button("保存") { renameSelected() }
+            Button("取消", role: .cancel) { renameTarget = nil }
         }
         .quickLookPreview($previewURL)
     }
@@ -559,6 +632,51 @@ private struct LocalDownloadFilesView: View {
             let bytes = (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
             return LocalDownloadFile(url: $0, bytes: bytes, recorded: recorded.contains($0.lastPathComponent))
         }.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
+    }
+
+
+    @MainActor private func deleteSelected() {
+        let targets = files.filter { selectedFiles.contains($0.url) }
+        for target in targets { delete(target) }
+        selectedFiles.removeAll()
+        isSelecting = false
+        reload()
+    }
+
+    @MainActor private func renameSelected() {
+        guard let target = renameTarget else { return }
+        renameTarget = nil
+        var name = newFilename.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != ".", name != "..",
+              !name.contains("/"), !name.contains("\\"), !name.contains(":") else {
+            deletionError = "文件名不合法。"
+            showError = true
+            return
+        }
+        do {
+            if let record = store.items.first(where: { $0.savedFilename == target.filename }) {
+                try store.renameCompleted(id: record.id, to: name)
+            } else {
+                if URL(fileURLWithPath: name).pathExtension.isEmpty, !target.url.pathExtension.isEmpty {
+                    name += "." + target.url.pathExtension
+                }
+                let folder = DownloadStore.downloadFolder.standardizedFileURL
+                let dest = folder.appendingPathComponent(name).standardizedFileURL
+                guard dest.deletingLastPathComponent() == folder else {
+                    throw NSError(domain: "BackgroundDL", code: 92,
+                        userInfo: [NSLocalizedDescriptionKey: "非法文件路径。"])
+                }
+                guard !FileManager.default.fileExists(atPath: dest.path) else {
+                    throw NSError(domain: "BackgroundDL", code: 93,
+                        userInfo: [NSLocalizedDescriptionKey: "目标文件名已存在。"])
+                }
+                try FileManager.default.moveItem(at: target.url, to: dest)
+            }
+            reload()
+        } catch {
+            deletionError = error.localizedDescription
+            showError = true
+        }
     }
 
     @MainActor private func delete(_ file: LocalDownloadFile) {
@@ -586,6 +704,274 @@ private struct LocalDownloadFilesView: View {
             deletionError = error.localizedDescription
             showError = true
             reload()
+        }
+    }
+}
+
+private struct DownloadDeleteSheet: View {
+    let filename: String
+    let deleteFileAvailable: Bool
+    let remove: (Bool) -> Void
+    let cancel: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("管理下载文件").font(.headline)
+            Text(filename).font(.subheadline).lineLimit(2).truncationMode(.middle).foregroundStyle(.secondary)
+            if deleteFileAvailable {
+                Button(role: .destructive) { remove(true) } label: {
+                    Label("永久删除本地文件与记录", systemImage: "trash").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent).tint(.red)
+            }
+            Button { remove(false) } label: {
+                Label("仅移除记录（保留文件）", systemImage: "list.bullet").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            Button("取消", action: cancel).frame(maxWidth: .infinity)
+        }
+        .padding(20)
+    }
+}
+
+
+// A task is inspected by immutable UUID; every statistic is resolved from the live
+// store, so background callbacks can update the sheet without stale row bindings.
+private struct DownloadDetailView: View {
+    let itemID: UUID
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var store = DownloadStore.shared
+    @State private var showingDelete = false
+    @State private var showingRename = false
+    @State private var newName = ""
+    @State private var previewURL: URL?
+    @State private var errorMessage = ""
+    @State private var showError = false
+
+    private var item: DownloadItem? { store.items.first(where: { $0.id == itemID }) }
+
+    var body: some View {
+        Group {
+            if let item {
+                List {
+                    Section {
+                        VStack(alignment: .leading, spacing: 11) {
+                            HStack(spacing: 12) {
+                                Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "arrow.down.doc.fill")
+                                    .font(.system(size: 30)).foregroundStyle(.cyan)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.filename).font(.headline).lineLimit(3)
+                                    Text(statusLabel(item)).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            if item.status == .running || item.status == .paused {
+                                ProgressView(value: item.fraction ?? 0).tint(.cyan)
+                                HStack {
+                                    Text(item.downloadedBytes.readableSize)
+                                    Spacer()
+                                    Text(item.totalBytes.readableSize)
+                                }
+                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 7)
+                    }
+                    Section("下载数据") {
+                        LabeledContent("已传输", value: item.downloadedBytes.readableSize)
+                        LabeledContent("总大小", value: item.totalBytes.readableSize)
+                        LabeledContent("速度（最近回调）", value: item.speedLabel)
+                        LabeledContent("预计剩余", value: item.etaLabel)
+                        LabeledContent("重试次数", value: "\(item.retries ?? 0)")
+                        if let last = item.lastProgressAt {
+                            LabeledContent("最后进度回调", value: last.formatted(date: .omitted, time: .standard))
+                        }
+                        if let next = item.nextRetryAt {
+                            LabeledContent("下次重试", value: next.formatted(date: .abbreviated, time: .shortened))
+                        }
+                    }
+                    Section("来源与存储") {
+                        LabeledContent("下载方式", value:
+                            SegmentedDownloader.shared.contains(id: item.id) ? "HTTP Range 分段" : "系统后台下载")
+                        LabeledContent("来源", value: item.sourceLabel)
+                        LabeledContent("建立日期", value: item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        LabeledContent("站点", value: URL(string: item.originalURL)?.host ?? "未知")
+                        LabeledContent("保存文件", value: item.savedFilename ?? "尚未完成")
+                        if item.status == .completed, store.fileURL(for: item) == nil {
+                            Label("记录显示已完成，但本地文件不可用", systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    if let error = item.errorMessage, !error.isEmpty {
+                        Section("异常诊断") {
+                            Text(error).font(.subheadline).foregroundStyle(.red)
+                        }
+                    }
+                    Section("操作") {
+                        if item.status == .running {
+                            Button { DownloadCoordinator.shared.changeState(id: item.id, action: .pause) } label: {
+                                Label("暂停下载", systemImage: "pause.fill")
+                            }
+                        } else if item.status == .paused {
+                            Button { DownloadCoordinator.shared.changeState(id: item.id, action: .resume) } label: {
+                                Label("继续下载", systemImage: "play.fill")
+                            }
+                        } else if item.status == .failed || item.status == .cancelled {
+                            Button("重试此任务", systemImage: "arrow.clockwise") { retry(item) }
+                        }
+                        if let file = store.fileURL(for: item),
+                           FileManager.default.fileExists(atPath: file.path) {
+                            Button { previewURL = file } label: { Label("预览文件", systemImage: "eye") }
+                            ShareLink(item: file) { Label("分享文件", systemImage: "square.and.arrow.up") }
+                            Button {
+                                newName = item.savedFilename ?? item.filename
+                                showingRename = true
+                            } label: { Label("重命名文件", systemImage: "pencil") }
+                        }
+                        ShareLink(item: diagnosticReport(item)) {
+                            Label("分享诊断报告（不含完整下载链接）", systemImage: "doc.text.magnifyingglass")
+                        }
+                        Button(role: .destructive) { showingDelete = true } label: {
+                            Label("删除任务…", systemImage: "trash")
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            } else {
+                ContentUnavailableView("任务已移除", systemImage: "checkmark.circle")
+            }
+        }
+        .navigationTitle("任务详情")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } } }
+        .confirmationDialog("如何处理这个任务？", isPresented: $showingDelete, titleVisibility: .visible) {
+            if let item, item.status == .completed {
+                Button("删除本地文件与记录", role: .destructive) { delete(item, file: true) }
+            }
+            Button("仅移除记录", role: .destructive) {
+                if let item { delete(item, file: false) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除本地文件不可恢复；仅移除记录不会删除文件。")
+        }
+        .alert("重命名文件", isPresented: $showingRename) {
+            TextField("新文件名", text: $newName)
+            Button("保存") {
+                do { try store.renameCompleted(id: itemID, to: newName) }
+                catch { display(error) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: { Text("不填写扩展名时会保留原扩展名。") }
+        .alert("操作失败", isPresented: $showError) {
+            Button("确定", role: .cancel) {}
+        } message: { Text(errorMessage) }
+        .quickLookPreview($previewURL)
+    }
+
+    private func statusLabel(_ item: DownloadItem) -> String {
+        switch item.status {
+        case .running: return "正在下载"
+        case .paused: return "已暂停"
+        case .completed: return "下载完成"
+        case .failed: return "失败"
+        case .cancelled: return "已取消"
+        }
+    }
+
+    private func diagnosticReport(_ item: DownloadItem) -> String {
+        // Do not export signed URL query tokens, login cookies or credentials.
+        [
+            "BackgroundDL 2.0 下载诊断",
+            "任务 ID: \(item.id.uuidString)",
+            "文件: \(item.filename)",
+            "网站: \(URL(string: item.originalURL)?.host ?? "未知")",
+            "状态: \(statusLabel(item))",
+            "已下载字节: \(item.downloadedBytes)",
+            "预期字节: \(item.totalBytes)",
+            "重试次数: \(item.retries ?? 0)",
+            "最后进度: \(item.lastProgressAt?.description ?? "无")",
+            "错误: \(item.errorMessage ?? "无")"
+        ].joined(separator: "\n")
+    }
+
+    @MainActor private func retry(_ item: DownloadItem) {
+        if SegmentedDownloader.shared.contains(id: item.id) {
+            SegmentedDownloader.shared.retry(id: item.id)
+        } else if item.source == .direct {
+            BackgroundDownloader.shared.retryExisting(id: item.id)
+        } else {
+            display(DownloadError.unsupportedLink("网页下载链接可能包含临时授权，请返回浏览器重新点击下载。"))
+        }
+    }
+
+    @MainActor private func delete(_ item: DownloadItem, file: Bool) {
+        do {
+            try DownloadCoordinator.shared.remove(id: item.id, deleteFile: file)
+            dismiss()
+        } catch { display(error) }
+    }
+    private func display(_ error: Error) {
+        errorMessage = error.localizedDescription
+        showError = true
+    }
+}
+
+private struct DownloadSettingsView: View {
+    @ObservedObject private var store = DownloadStore.shared
+    @AppStorage("bgdl.downloadMode") private var downloadMode = "smart"
+    @AppStorage("bgdl.notifyDownloads") private var notifyDownloads = false
+    @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
+    @State private var showHistoryClear = false
+
+    private var localStorageBytes: Int64 {
+        let paths = (try? FileManager.default.contentsOfDirectory(at: DownloadStore.downloadFolder,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey])) ?? []
+        return paths.reduce(Int64(0)) { sum, url in
+            sum + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Label("BackgroundDL 2.0", systemImage: "arrow.down.circle.fill")
+                    .font(.headline)
+                LabeledContent("已保存文件总大小", value: localStorageBytes.readableSize)
+                LabeledContent("已完成任务", value: "\(store.completedCount)")
+                LabeledContent("正在下载", value: "\(store.runningCount)")
+            }
+            Section("下载引擎") {
+                Picker("下载模式", selection: $downloadMode) {
+                    ForEach(DownloadMode.allCases) { mode in
+                        Text(mode.label).tag(mode.rawValue)
+                    }
+                }
+                Toggle("下载完成和失败通知", isOn: $notifyDownloads)
+                    .onChange(of: notifyDownloads) { _, enabled in
+                        if enabled { DownloadNotifications.requestPermission() }
+                    }
+                Text("智能/极速模式仅对支持 Range 的 HTTPS 直链尝试多连接。后台传输仍由 iOS 调度，不能保证持续满速。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("浏览器") {
+                Picker("网页外观", selection: $webAppearanceMode) {
+                    Text("智能深色").tag("auto")
+                    Text("始终深色").tag("always")
+                    Text("网站原样").tag("off")
+                }
+                Button("清除浏览历史", role: .destructive) { showHistoryClear = true }
+                Text("清除历史不会清理浏览器 Cookie 或取消正在进行的下载。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("隐私与诊断") {
+                Text("任务详情支持分享脱敏诊断报告，不包含完整签名链接、密码或 Cookie。")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Text("下载文件仅保存在本机的「文件 → 在我的 iPhone 上 → 后台下载 → Downloads」。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("设置")
+        .confirmationDialog("清除浏览历史？", isPresented: $showHistoryClear) {
+            Button("清除历史", role: .destructive) { BrowserLibrary.shared.clearHistory() }
         }
     }
 }

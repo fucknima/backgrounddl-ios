@@ -26,6 +26,7 @@ final class BrowserState: ObservableObject {
     }
 
     func loadSharedURL(_ url: URL) {
+        isHome = false
         address = url.absoluteString
         loadURL = url
         webView?.load(URLRequest(url: url))
@@ -68,6 +69,8 @@ struct BrowserView: View {
     @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
+    @ObservedObject private var library = BrowserLibrary.shared
+    @State private var showHistory = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -137,9 +140,9 @@ struct BrowserView: View {
             ZStack {
                 BrowserWebView(state: state, appearanceMode: webAppearanceMode)
                 if state.isHome {
-                    ContentUnavailableView("打开网页", systemImage: "globe",
-                        description: Text("粘贴分享网址，在网页中点击下载。"))
-                        .allowsHitTesting(false)
+                    BrowserStartPage(open: { url in
+                        state.loadSharedURL(url)
+                    })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -166,6 +169,18 @@ struct BrowserView: View {
                     .lineLimit(1)
                     .frame(maxWidth: 120, alignment: .trailing)
                 Menu {
+                    if let url = state.webView?.url, url.scheme == "https" {
+                        Button {
+                            library.toggleBookmark(url: url, title: state.currentTitle)
+                        } label: {
+                            Label(library.isBookmarked(url) ? "取消收藏此网页" : "收藏此网页",
+                                  systemImage: library.isBookmarked(url) ? "star.slash" : "star")
+                        }
+                    }
+                    Button { showHistory = true } label: {
+                        Label("浏览历史", systemImage: "clock.arrow.circlepath")
+                    }
+                    Divider()
                     Button {
                         webAppearanceMode = "auto"
                     } label: {
@@ -201,6 +216,14 @@ struct BrowserView: View {
             if let url { state.loadSharedURL(url) }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showHistory) {
+            NavigationStack {
+                BrowserHistoryView(open: { url in
+                    showHistory = false
+                    state.loadSharedURL(url)
+                })
+            }
+        }
         .alert("网页提示", isPresented: $state.showMessage) {
             Button("确定", role: .cancel) { }
         } message: { Text(state.message) }
@@ -386,6 +409,9 @@ private struct BrowserWebView: UIViewRepresentable {
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             state.updateNavigation(webView)
+            if let url = webView.url, url.scheme?.lowercased() == "https" {
+                BrowserLibrary.shared.record(url: url, title: webView.title ?? url.host ?? "网页")
+            }
             syncPageTheme(webView: webView, force: true)
         }
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
@@ -498,5 +524,180 @@ private struct BrowserWebView: UIViewRepresentable {
                 state.notice = "已接管：\(name)。切到“下载”页查看速度、预计完成时间与进度。"
             }
         }
+    }
+}
+
+
+// Browser history and bookmarks contain only user-visited HTTPS pages; cookies,
+// credentials and page contents are never written here.
+private struct BrowserEntry: Codable, Identifiable {
+    let url: String
+    var title: String
+    var visited: Date
+    var id: String { url }
+}
+
+@MainActor
+final class BrowserLibrary: ObservableObject {
+    static let shared = BrowserLibrary()
+    @Published private(set) var bookmarks: [BrowserEntry] = []
+    @Published private(set) var history: [BrowserEntry] = []
+    private let bookmarkKey = "bgdl.browser.bookmarks.v2"
+    private let historyKey = "bgdl.browser.history.v2"
+    private init() {
+        if let data = UserDefaults.standard.data(forKey: bookmarkKey) {
+            bookmarks = (try? JSONDecoder().decode([BrowserEntry].self, from: data)) ?? []
+        }
+        if let data = UserDefaults.standard.data(forKey: historyKey) {
+            history = (try? JSONDecoder().decode([BrowserEntry].self, from: data)) ?? []
+        }
+    }
+    func isBookmarked(_ url: URL) -> Bool { bookmarks.contains { $0.url == url.absoluteString } }
+    func toggleBookmark(url: URL, title: String) {
+        guard url.scheme?.lowercased() == "https" else { return }
+        if let index = bookmarks.firstIndex(where: { $0.url == url.absoluteString }) {
+            bookmarks.remove(at: index)
+        } else {
+            bookmarks.insert(BrowserEntry(url: url.absoluteString, title: title,
+                                         visited: Date()), at: 0)
+        }
+        save(bookmarks, as: bookmarkKey)
+    }
+    func record(url: URL, title: String) {
+        guard url.scheme?.lowercased() == "https" else { return }
+        history.removeAll { $0.url == url.absoluteString }
+        history.insert(BrowserEntry(url: url.absoluteString, title: title, visited: Date()), at: 0)
+        if history.count > 150 { history.removeLast(history.count - 150) }
+        save(history, as: historyKey)
+    }
+    func clearHistory() {
+        history = []
+        UserDefaults.standard.removeObject(forKey: historyKey)
+    }
+    func deleteHistory(_ url: String) {
+        history.removeAll { $0.url == url }
+        save(history, as: historyKey)
+    }
+    private func save(_ entries: [BrowserEntry], as key: String) {
+        if let data = try? JSONEncoder().encode(entries) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+}
+
+private struct BrowserStartPage: View {
+    @ObservedObject private var library = BrowserLibrary.shared
+    let open: (URL) -> Void
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("浏览器主页").font(.largeTitle.bold())
+                    Text("粘贴分享链接，或从收藏和最近访问继续。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                .padding(.top, 32)
+                if !library.bookmarks.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("收藏网站", systemImage: "star.fill").font(.headline)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))], spacing: 12) {
+                            ForEach(library.bookmarks.prefix(12)) { entry in
+                                Button {
+                                    if let url = URL(string: entry.url) { open(url) }
+                                } label: {
+                                    VStack(spacing: 7) {
+                                        Image(systemName: "globe").font(.title2).foregroundStyle(.cyan)
+                                        Text(URL(string: entry.url)?.host ?? entry.title)
+                                            .font(.caption).lineLimit(1)
+                                    }
+                                    .frame(maxWidth: .infinity).padding(13)
+                                    .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                                in: RoundedRectangle(cornerRadius: 17))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("最近访问", systemImage: "clock").font(.headline)
+                    if library.history.isEmpty {
+                        Text("打开网页后，会在这里保留最近访问记录。")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    ForEach(library.history.prefix(10)) { entry in
+                        Button {
+                            if let url = URL(string: entry.url) { open(url) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "globe").foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(entry.title).font(.subheadline.weight(.medium))
+                                        .lineLimit(1)
+                                    Text(URL(string: entry.url)?.host ?? entry.url)
+                                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+}
+
+private struct BrowserHistoryView: View {
+    @ObservedObject private var library = BrowserLibrary.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var search = ""
+    @State private var confirmingClear = false
+    let open: (URL) -> Void
+    private var results: [BrowserEntry] {
+        library.history.filter {
+            search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) ||
+                $0.url.localizedCaseInsensitiveContains(search)
+        }
+    }
+    var body: some View {
+        List {
+            ForEach(results) { entry in
+                Button {
+                    if let url = URL(string: entry.url) { open(url) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.title).font(.subheadline).lineLimit(1)
+                        Text(URL(string: entry.url)?.host ?? entry.url)
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .contextMenu {
+                    Button("移除这条历史", systemImage: "trash") {
+                        library.deleteHistory(entry.url)
+                    }
+                }
+            }
+        }
+        .navigationTitle("浏览历史")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $search, prompt: "查找历史记录")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("清除", role: .destructive) { confirmingClear = true }
+                    .disabled(library.history.isEmpty)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("完成") { dismiss() }
+            }
+        }
+        .confirmationDialog("清除全部历史？", isPresented: $confirmingClear) {
+            Button("清除历史", role: .destructive) { library.clearHistory() }
+        } message: { Text("不会删除 Cookie、收藏或下载文件。") }
     }
 }

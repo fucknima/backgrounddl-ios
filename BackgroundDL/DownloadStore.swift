@@ -405,7 +405,8 @@ final class DownloadStore: ObservableObject {
 
     func fileURL(for item: DownloadItem) -> URL? {
         guard item.status == .completed, let name = item.savedFilename else { return nil }
-        return Self.downloadFolder.appendingPathComponent(name)
+        let url = Self.downloadFolder.appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     var runningCount: Int {
@@ -417,7 +418,12 @@ final class DownloadStore: ObservableObject {
     }
 
     var aggregateSpeedLabel: String {
-        let total = items.compactMap(\.speedBytesPerSecond).reduce(0, +)
+        // Never count stale estimates after iOS suspends background callbacks.
+        let now = Date()
+        let total = items.filter { item in
+            item.status == .running &&
+            (item.lastProgressAt.map { now.timeIntervalSince($0) < 18 } ?? false)
+        }.compactMap(\.speedBytesPerSecond).reduce(0, +)
         guard total > 0 else { return "--" }
         return ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file) + "/s"
     }
