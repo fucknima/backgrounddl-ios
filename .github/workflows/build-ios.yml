@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -19,6 +19,10 @@ jobs:
           xcodebuild -version
           xcodebuild -list -project BackgroundDL.xcodeproj
           plutil -lint BackgroundDL.xcodeproj/project.pbxproj BackgroundDL/Info.plist BackgroundDLLiveActivity/Info.plist BackgroundDLShareExtension/Info.plist BackgroundDL/BackgroundDL.entitlements BackgroundDLShareExtension/ShareExtension.entitlements
+      - name: Render new 1024px light and dark app icons
+        run: |
+          swift Tools/GenerateIcons.swift
+          sips -g pixelWidth -g pixelHeight BackgroundDL/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png BackgroundDL/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark-1024.png
       - name: Run byte-range validator tests
         run: |
           swiftc BackgroundDL/RangeSupport.swift Tests/main.swift -o /tmp/bgdl-range-tests
@@ -42,6 +46,17 @@ jobs:
           cp -R "$APP" Payload/
           zip -qr BackgroundDL-unsigned.ipa Payload
           unzip -tqq BackgroundDL-unsigned.ipa
+      - name: Commit generated icon artwork
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add BackgroundDL/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png BackgroundDL/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark-1024.png
+          if ! git diff --cached --quiet; then
+            git commit -m "Render refreshed light/dark app icons [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
