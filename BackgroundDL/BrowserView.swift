@@ -196,7 +196,6 @@ struct BrowserView: View {
                     } label: {
                         Label("网站原样", systemImage: webAppearanceMode == "off" ? "checkmark.circle.fill" : "sun.max")
                     }
-                    Text("智能模式只在系统深色且网页背景偏亮时自动变暗；复杂网页可切回原样。")
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }

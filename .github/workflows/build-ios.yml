@@ -27,6 +27,20 @@ jobs:
         run: |
           swiftc BackgroundDL/RangeSupport.swift Tests/main.swift -o /tmp/bgdl-range-tests
           /tmp/bgdl-range-tests
+      - name: Check three-tab UI and menu icon regressions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          content = Path("BackgroundDL/ContentView.swift").read_text()
+          browser = Path("BackgroundDL/BrowserView.swift").read_text()
+          assert "case browser, downloads, settings" in content
+          assert "MainTab.files" not in content
+          assert "LocalDownloadFilesView" not in content
+          assert 'Label("下载模式", systemImage: "arrow.down.circle")' in content
+          assert 'Label("排序方式", systemImage: "arrow.up.arrow.down")' in content
+          assert "智能模式只在系统深色且网页背景偏亮时自动变暗；复杂网页可切回原样。" not in browser
+          print("PASS: three tabs, menu icons and no explanatory menu row")
+          PY
       - name: Build without code signing
         shell: bash
         run: |

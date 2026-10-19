@@ -2,7 +2,7 @@ import SwiftUI
 import QuickLook
 
 private enum MainTab: Hashable {
-    case browser, downloads, files, settings
+    case browser, downloads, settings
 }
 
 struct ContentView: View {
@@ -18,9 +18,6 @@ struct ContentView: View {
             NavigationStack { DownloadListView() }
                 .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
                 .tag(MainTab.downloads)
-            NavigationStack { LocalDownloadFilesView(showCloseButton: false) }
-                .tabItem { Label("文件", systemImage: "folder") }
-                .tag(MainTab.files)
             NavigationStack { DownloadSettingsView() }
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(MainTab.settings)
@@ -161,7 +158,7 @@ private struct DownloadListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Menu("下载模式") {
+                    Menu {
                         ForEach(DownloadMode.allCases) { mode in
                             Button {
                                 downloadMode = mode.rawValue
@@ -169,8 +166,10 @@ private struct DownloadListView: View {
                                 Label(mode.label, systemImage: downloadMode == mode.rawValue ? "checkmark" : "circle")
                             }
                         }
+                    } label: {
+                        Label("下载模式", systemImage: "arrow.down.circle")
                     }
-                    Menu("排序方式") {
+                    Menu {
                         ForEach(DownloadSort.allCases, id: \.self) { order in
                             Button {
                                 sortOrder = order
@@ -178,6 +177,8 @@ private struct DownloadListView: View {
                                 Label(order.rawValue, systemImage: sortOrder == order ? "checkmark" : "circle")
                             }
                         }
+                    } label: {
+                        Label("排序方式", systemImage: "arrow.up.arrow.down")
                     }
                     Toggle(isOn: $notifyDownloads) {
                         Label("完成/失败通知", systemImage: "bell")
@@ -410,289 +411,6 @@ private struct CompactDownloadRow: View {
         }
     }
     private func report(_ error: Error) { errorText = error.localizedDescription; showError = true }
-}
-
-private struct LocalDownloadFile: Identifiable {
-    let url: URL
-    let bytes: Int64
-    let recorded: Bool
-    var id: URL { url }
-    var filename: String { url.lastPathComponent }
-    var modified: Date {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-    }
-    var category: String {
-        switch url.pathExtension.lowercased() {
-        case "zip", "rar", "7z", "tar", "gz", "xz", "iso": return "压缩包"
-        case "mp4", "mov", "mkv", "avi", "mp3", "m4a", "flac": return "音视频"
-        case "jpg", "jpeg", "png", "gif", "webp", "heic": return "图片"
-        default: return "其他"
-        }
-    }
-}
-
-struct LocalDownloadFilesView: View {
-    var showCloseButton = true
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var store = DownloadStore.shared
-    @State private var files: [LocalDownloadFile] = []
-    @State private var pendingDelete: LocalDownloadFile?
-    @State private var deletionError = ""
-    @State private var showError = false
-    @State private var previewURL: URL?
-    @State private var searchText = ""
-    @State private var sortBy = "date"
-    @State private var category = "全部"
-    @State private var isSelecting = false
-    @State private var selectedFiles = Set<URL>()
-    @State private var confirmBatchDelete = false
-    @State private var renameTarget: LocalDownloadFile?
-    @State private var newFilename = ""
-    @State private var showRename = false
-
-    private var visibleFiles: [LocalDownloadFile] {
-        let filtered = files.filter { file in
-            (category == "全部" || file.category == category) &&
-            (searchText.isEmpty || file.filename.localizedCaseInsensitiveContains(searchText))
-        }
-        switch sortBy {
-        case "name":
-            return filtered.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
-        case "size":
-            return filtered.sorted { $0.bytes > $1.bytes }
-        default:
-            return filtered.sorted { $0.modified > $1.modified }
-        }
-    }
-
-    var body: some View {
-        List {
-            Section {
-                HStack {
-                    Text("共 \(files.count) 个文件")
-                    Spacer()
-                    Text(files.reduce(Int64(0)) { $0 + $1.bytes }.readableSize)
-                        .foregroundStyle(.secondary)
-                }
-                .font(.subheadline)
-            } footer: {
-                Text("此处直接读取“文件”App → 在我的 iPhone 上 → 后台下载 → Downloads，包括记录已移除但仍保存在设备上的文件。")
-            }
-            Section {
-                Picker("文件类型", selection: $category) {
-                    ForEach(["全部", "压缩包", "音视频", "图片", "其他"], id: \.self) { type in
-                        Text(type).tag(type)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-            .listRowBackground(Color.clear)
-
-            if visibleFiles.isEmpty {
-                ContentUnavailableView(searchText.isEmpty ? "暂无本地文件" : "没有匹配的文件",
-                    systemImage: "folder", description: Text("下载完成后的文件会保存在这里。"))
-            } else {
-                Section("本地文件") {
-                    ForEach(visibleFiles) { file in
-                        HStack(spacing: 12) {
-                            if isSelecting {
-                                Image(systemName: selectedFiles.contains(file.url) ? "checkmark.circle.fill" : "circle")
-                                    .font(.title3).foregroundStyle(.cyan)
-                            } else {
-                                Image(systemName: file.category == "压缩包" ? "doc.zipper" : "doc.fill")
-                                    .foregroundStyle(.cyan).frame(width: 24)
-                            }
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(file.filename)
-                                    .font(.subheadline.weight(.medium))
-                                    .lineLimit(2)
-                                    .truncationMode(.middle)
-                                Text("\(file.bytes.readableSize) · \(file.recorded ? "有记录" : "无记录")")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if isSelecting {
-                                    if selectedFiles.contains(file.url) { selectedFiles.remove(file.url) }
-                                    else { selectedFiles.insert(file.url) }
-                                } else { previewURL = file.url }
-                            }
-                            Spacer(minLength: 4)
-                            if !isSelecting {
-                                Menu {
-                                    Button { previewURL = file.url } label: {
-                                        Label("预览", systemImage: "eye")
-                                    }
-                                    ShareLink(item: file.url) {
-                                        Label("分享 / 存储到文件", systemImage: "square.and.arrow.up")
-                                    }
-                                    Button {
-                                        renameTarget = file
-                                        newFilename = file.filename
-                                        showRename = true
-                                    } label: { Label("重命名", systemImage: "pencil") }
-                                    Button(role: .destructive) {
-                                        pendingDelete = file
-                                    } label: { Label("永久删除", systemImage: "trash") }
-                                } label: {
-                                    Image(systemName: "ellipsis.circle")
-                                        .font(.title3).frame(width: 36, height: 38)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 5)
-                    }
-                }
-            }
-        }
-        .navigationTitle("文件")
-        .navigationBarTitleDisplayMode(showCloseButton ? .inline : .large)
-        .searchable(text: $searchText, prompt: "搜索文件")
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    Button("按日期排序") { sortBy = "date" }
-                    Button("按名称排序") { sortBy = "name" }
-                    Button("按大小排序") { sortBy = "size" }
-                    Button("刷新") { reload() }
-                } label: { Image(systemName: "arrow.up.arrow.down") }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(isSelecting ? "完成" : "选择") {
-                    isSelecting.toggle()
-                    if !isSelecting { selectedFiles.removeAll() }
-                }
-            }
-            if showCloseButton {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭") { dismiss() }
-                }
-            }
-            if isSelecting && !selectedFiles.isEmpty {
-                ToolbarItem(placement: .bottomBar) {
-                    Button("删除所选（\(selectedFiles.count)）", role: .destructive) {
-                        confirmBatchDelete = true
-                    }
-                }
-            }
-        }
-        .onAppear(perform: reload)
-        .alert("永久删除本地文件？", isPresented: Binding(
-            get: { pendingDelete != nil },
-            set: { if !$0 { pendingDelete = nil } }
-        ), presenting: pendingDelete) { file in
-            Button("删除文件", role: .destructive) { delete(file) }
-            Button("取消", role: .cancel) { pendingDelete = nil }
-        } message: { file in
-            Text("将永久删除“\(file.filename)”，如果存在对应的下载记录，也会一并移除。这不会进入系统“最近删除”。")
-        }
-        .alert("删除失败", isPresented: $showError) {
-            Button("确定", role: .cancel) { }
-        } message: {
-            Text(deletionError)
-        }
-
-        .confirmationDialog("永久删除所选文件？", isPresented: $confirmBatchDelete) {
-            Button("删除 \(selectedFiles.count) 个文件", role: .destructive) {
-                deleteSelected()
-            }
-        } message: { Text("这些文件不会进入“最近删除”，相关下载记录也会移除。") }
-        .alert("重命名本地文件", isPresented: $showRename) {
-            TextField("文件名", text: $newFilename)
-            Button("保存") { renameSelected() }
-            Button("取消", role: .cancel) { renameTarget = nil }
-        }
-        .quickLookPreview($previewURL)
-    }
-
-    @MainActor private func reload() {
-        let folder = DownloadStore.downloadFolder
-        let urls = (try? FileManager.default.contentsOfDirectory(
-            at: folder,
-            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-        let recorded = Set(store.items.compactMap { $0.savedFilename })
-        files = urls.filter {
-            (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
-        }.map {
-            let bytes = (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-            return LocalDownloadFile(url: $0, bytes: bytes, recorded: recorded.contains($0.lastPathComponent))
-        }.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
-    }
-
-
-    @MainActor private func deleteSelected() {
-        let targets = files.filter { selectedFiles.contains($0.url) }
-        for target in targets { delete(target) }
-        selectedFiles.removeAll()
-        isSelecting = false
-        reload()
-    }
-
-    @MainActor private func renameSelected() {
-        guard let target = renameTarget else { return }
-        renameTarget = nil
-        var name = newFilename.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, name != ".", name != "..",
-              !name.contains("/"), !name.contains("\\"), !name.contains(":") else {
-            deletionError = "文件名不合法。"
-            showError = true
-            return
-        }
-        do {
-            if let record = store.items.first(where: { $0.savedFilename == target.filename }) {
-                try store.renameCompleted(id: record.id, to: name)
-            } else {
-                if URL(fileURLWithPath: name).pathExtension.isEmpty, !target.url.pathExtension.isEmpty {
-                    name += "." + target.url.pathExtension
-                }
-                let folder = DownloadStore.downloadFolder.standardizedFileURL
-                let dest = folder.appendingPathComponent(name).standardizedFileURL
-                guard dest.deletingLastPathComponent() == folder else {
-                    throw NSError(domain: "BackgroundDL", code: 92,
-                        userInfo: [NSLocalizedDescriptionKey: "非法文件路径。"])
-                }
-                guard !FileManager.default.fileExists(atPath: dest.path) else {
-                    throw NSError(domain: "BackgroundDL", code: 93,
-                        userInfo: [NSLocalizedDescriptionKey: "目标文件名已存在。"])
-                }
-                try FileManager.default.moveItem(at: target.url, to: dest)
-            }
-            reload()
-        } catch {
-            deletionError = error.localizedDescription
-            showError = true
-        }
-    }
-
-    @MainActor private func delete(_ file: LocalDownloadFile) {
-        pendingDelete = nil
-        let folder = DownloadStore.downloadFolder.standardizedFileURL
-        let actual = file.url.standardizedFileURL
-        guard actual.deletingLastPathComponent() == folder else {
-            deletionError = "文件路径异常，已拒绝删除。"
-            showError = true
-            return
-        }
-        do {
-            if let item = store.items.first(where: { $0.savedFilename == file.filename }) {
-                try DownloadCoordinator.shared.remove(id: item.id, deleteFile: true)
-            } else {
-                try FileManager.default.removeItem(at: actual)
-            }
-            // Never announce success based solely on a removed list row.
-            guard !FileManager.default.fileExists(atPath: actual.path) else {
-                throw NSError(domain: "BackgroundDL", code: 90,
-                              userInfo: [NSLocalizedDescriptionKey: "删除操作结束后文件仍存在。"])
-            }
-            reload()
-        } catch {
-            deletionError = error.localizedDescription
-            showError = true
-            reload()
-        }
-    }
 }
 
 private struct DownloadDeleteSheet: View {
