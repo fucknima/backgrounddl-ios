@@ -124,6 +124,12 @@ onSlider("contrast","contrast");
 q("engine").addEventListener("change",()=>doChange("ui-bg-set-theme",{engine:q("engine").value},"已切换渲染引擎"));
 q("detectDark").addEventListener("change",()=>doChange("ui-bg-change-settings",{detectDarkTheme:q("detectDark").checked},"深色主题检测已更新"));
 q("reset").addEventListener("click",()=>doChange("ui-bg-set-theme",{brightness:100,contrast:100,engine:"dynamicTheme"},"已恢复默认显示参数"));
+q("permissionButton").addEventListener("click", () => {
+  const panel=q("permissionHelp");
+  const show=panel.hidden;
+  panel.hidden=!show;
+  q("permissionButton").setAttribute("aria-expanded",String(show));
+});
 if(!runtime){fail("未检测到 Safari 扩展环境");return;}
 refresh(0);
 })();
