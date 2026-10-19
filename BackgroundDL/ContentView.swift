@@ -77,7 +77,7 @@ private struct DownloadListView: View {
     @State private var pendingDeletion: PendingDeletion?
     @State private var selectedDetail: DetailSelection?
     @State private var showClearCompleted = false
-    @State private var showLocalFiles = false
+
     @State private var showDirectInput = false
     @State private var link = ""
     @State private var searchText = ""
@@ -182,7 +182,6 @@ private struct DownloadListView: View {
                     Toggle(isOn: $notifyDownloads) {
                         Label("完成/失败通知", systemImage: "bell")
                     }
-                    Button { showLocalFiles = true } label: { Label("本地文件管理", systemImage: "folder") }
                     Button { showDirectInput = true } label: { Label("添加直链", systemImage: "plus") }
                     Button { showClearCompleted = true } label: { Label("清理已完成记录", systemImage: "checkmark.circle") }
                         .disabled(store.completedCount == 0)
@@ -221,9 +220,6 @@ private struct DownloadListView: View {
             Button("取消", role: .cancel) { }
         } message: { Text("普通网页分享链接请从浏览器打开。") }
         .alert("操作提示", isPresented: $showAlert) { Button("确定", role: .cancel) { } } message: { Text(alertMessage) }
-        .sheet(isPresented: $showLocalFiles) {
-            NavigationStack { LocalDownloadFilesView() }
-        }
         .task { DownloadCoordinator.shared.reconnect() }
         .onChange(of: notifyDownloads) { _, enabled in
             if enabled { DownloadNotifications.requestPermission() }
@@ -500,17 +496,8 @@ struct LocalDownloadFilesView: View {
                     ForEach(visibleFiles) { file in
                         HStack(spacing: 12) {
                             if isSelecting {
-                                Button {
-                                    if selectedFiles.contains(file.url) {
-                                        selectedFiles.remove(file.url)
-                                    } else {
-                                        selectedFiles.insert(file.url)
-                                    }
-                                } label: {
-                                    Image(systemName: selectedFiles.contains(file.url) ? "checkmark.circle.fill" : "circle")
-                                        .font(.title3).foregroundStyle(.cyan)
-                                }
-                                .buttonStyle(.plain)
+                                Image(systemName: selectedFiles.contains(file.url) ? "checkmark.circle.fill" : "circle")
+                                    .font(.title3).foregroundStyle(.cyan)
                             } else {
                                 Image(systemName: file.category == "压缩包" ? "doc.zipper" : "doc.fill")
                                     .foregroundStyle(.cyan).frame(width: 24)
@@ -522,6 +509,13 @@ struct LocalDownloadFilesView: View {
                                     .truncationMode(.middle)
                                 Text("\(file.bytes.readableSize) · \(file.recorded ? "有记录" : "无记录")")
                                     .font(.caption).foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if isSelecting {
+                                    if selectedFiles.contains(file.url) { selectedFiles.remove(file.url) }
+                                    else { selectedFiles.insert(file.url) }
+                                } else { previewURL = file.url }
                             }
                             Spacer(minLength: 4)
                             if !isSelecting {
@@ -547,13 +541,6 @@ struct LocalDownloadFilesView: View {
                             }
                         }
                         .padding(.vertical, 5)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if isSelecting {
-                                if selectedFiles.contains(file.url) { selectedFiles.remove(file.url) }
-                                else { selectedFiles.insert(file.url) }
-                            } else { previewURL = file.url }
-                        }
                     }
                 }
             }
