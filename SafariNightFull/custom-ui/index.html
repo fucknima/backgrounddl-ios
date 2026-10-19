@@ -11,14 +11,12 @@
 <body>
 <main id="app" class="app" aria-busy="true">
   <header class="brand">
-    <div class="mark" aria-hidden="true">
-      <span class="moon"></span><span class="smallstar"></span>
-    </div>
+    <img class="logo" src="zhiye-logo.png" width="45" height="45" alt="智夜图标">
     <div class="brand-copy">
       <h1>智夜</h1>
       <p>让每个网页，舒适一点</p>
     </div>
-    <span class="version">V3.1</span>
+    <span class="version">V3.2</span>
   </header>
 
   <div class="summary">
@@ -53,6 +51,20 @@
       <input type="checkbox" id="siteEnabled" aria-label="为当前网站开启夜间模式" disabled>
       <span class="track"></span>
     </label>
+  </section>
+
+  <section class="guide-block" aria-label="Safari 访问权限">
+    <button class="guide-button" id="permissionButton" type="button" aria-expanded="false" aria-controls="permissionHelp">
+      <span>Safari 网站权限怎么开启？</span>
+      <span class="guide-arrow" aria-hidden="true">↗</span>
+    </button>
+    <div id="permissionHelp" class="permission-help panel" hidden>
+      <strong>Safari 网站访问授权</strong>
+      <p>1. 打开 iPhone「设置」→「App」→「Safari」→「扩展」。</p>
+      <p>2. 找到「智夜」，开启扩展，并将「所有网站」设为「允许」。</p>
+      <p>3. 回到 Safari 刷新网页，再切换智夜的深色模式。</p>
+      <p class="permission-note">权限必须由 iOS Safari 授予。本说明在应用内展示，不会跳转其他网站。</p>
+    </div>
   </section>
 
   <section class="appearance panel" aria-label="显示调节">
