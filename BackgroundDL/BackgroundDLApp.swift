@@ -8,6 +8,9 @@ final class DownloaderAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         _ = BackgroundDownloader.shared
+        if #available(iOS 26.0, *) {
+            ContinuedDownloadProgress.shared.register()
+        }
         Task { @MainActor in
             DownloadCoordinator.shared.reconnect()
             DownloadRetryManager.shared.resumePending()

@@ -179,6 +179,9 @@ final class DownloadStore: ObservableObject {
 
     func add(_ item: DownloadItem) {
         items.insert(item, at: 0)
+        if #available(iOS 26.0, *) {
+            ContinuedDownloadProgress.shared.startIfPossible(item)
+        }
         // The first callback establishes a baseline; resumeData can already contain gigabytes.
         progressSamples[item.id] = nil
         persist()
@@ -221,6 +224,9 @@ final class DownloadStore: ObservableObject {
             progressSamples[id] = nil
         }
         persist()
+        if #available(iOS 26.0, *) {
+            ContinuedDownloadProgress.shared.synchronize(items[index])
+        }
         DownloadActivityManager.shared.refresh(items, force: true)
     }
 
@@ -304,6 +310,9 @@ final class DownloadStore: ObservableObject {
         items[index].lastProgressAt = now
         lastProgressWrite[id] = now
         persist(force: false)
+        if #available(iOS 26.0, *) {
+            ContinuedDownloadProgress.shared.synchronize(items[index])
+        }
         DownloadActivityManager.shared.refresh(items)
     }
 

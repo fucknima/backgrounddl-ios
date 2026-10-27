@@ -41,6 +41,22 @@ jobs:
           assert "智能模式只在系统深色且网页背景偏亮时自动变暗；复杂网页可切回原样。" not in browser
           print("PASS: three tabs, menu icons and no explanatory menu row")
           PY
+      - name: Validate iOS 26 progress fallback
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          root = plistlib.loads(Path("BackgroundDL/Info.plist").read_bytes())
+          assert any("downloadProgress" in x for x in root["BGTaskSchedulerPermittedIdentifiers"])
+          src = Path("BackgroundDL/DownloadActivityManager.swift").read_text()
+          assert "#available(iOS 26.0, *)" in src
+          assert "Activity<DownloadActivityAttributes>.activities" in src
+          assert "BGContinuedProcessingTaskRequest" in src
+          ui = Path("BackgroundDL/ContentView.swift").read_text()
+          assert 'Label("仅移除记录", systemImage: "list.bullet")' in ui
+          assert ".presentationDetents([.height(pendingDeletion.deleteFile ? 226 : 176)])" in ui
+          print("PASS: iOS 26 system progress and legacy fallback")
+          PY
       - name: Build without code signing
         shell: bash
         run: |

@@ -207,7 +207,7 @@ private struct DownloadListView: View {
                     remove: { removeLocalFile in confirmRemoval(deleteFile: removeLocalFile) },
                     cancel: { self.pendingDeletion = nil }
                 )
-                .presentationDetents([.height(290)])
+                .presentationDetents([.height(pendingDeletion.deleteFile ? 226 : 176)])
                 .presentationDragIndicator(.visible)
             }
         }
@@ -431,26 +431,58 @@ private struct DownloadDeleteSheet: View {
     let deleteFileAvailable: Bool
     let remove: (Bool) -> Void
     let cancel: () -> Void
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("管理下载文件").font(.headline)
-            Text(filename).font(.subheadline).lineLimit(2).truncationMode(.middle).foregroundStyle(.secondary)
-            if deleteFileAvailable {
-                Button(role: .destructive) { remove(true) } label: {
-                    Label("永久删除本地文件与记录", systemImage: "trash").frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("管理下载任务")
+                        .font(.headline)
+                    Text(filename)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .buttonStyle(.borderedProminent).tint(.red)
+                Spacer(minLength: 8)
+                Button(action: cancel) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(.quaternary, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭")
             }
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            if deleteFileAvailable {
+                Divider()
+                Button(role: .destructive) { remove(true) } label: {
+                    Label("删除本地文件与记录", systemImage: "trash")
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 48)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+            }
+            Divider()
             Button { remove(false) } label: {
-                Label("仅移除记录（保留文件）", systemImage: "list.bullet").frame(maxWidth: .infinity)
+                Label("仅移除记录", systemImage: "list.bullet")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 48)
             }
-            .buttonStyle(.bordered)
-            Button("取消", action: cancel).frame(maxWidth: .infinity)
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
         }
-        .padding(20)
+        .padding(.horizontal, 22)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
-
 
 // A task is inspected by immutable UUID; every statistic is resolved from the live
 // store, so background callbacks can update the sheet without stale row bindings.
