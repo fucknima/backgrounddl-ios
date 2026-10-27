@@ -187,6 +187,11 @@ final class DownloadStore: ObservableObject {
 
     func update(_ id: UUID, status: DownloadStatus, message: String? = nil, savedFilename: String? = nil) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        // Write the completion time once, on the first transition to completed.
+        // Repeated notifications or relaunches must not replace the original date.
+        if status == .completed, items[index].status != .completed, items[index].completedAt == nil {
+            items[index].completedAt = Date()
+        }
         items[index].status = status
         items[index].errorMessage = message
         if status == .running || status == .completed || status == .cancelled {

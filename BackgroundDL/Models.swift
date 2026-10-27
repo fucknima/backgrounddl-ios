@@ -31,6 +31,8 @@ struct DownloadItem: Identifiable, Codable {
     var retries: Int? = nil
     var nextRetryAt: Date? = nil
     var lastProgressAt: Date? = nil
+    // Set only after a verified file has been saved; nil for older records.
+    var completedAt: Date? = nil
 
     var fraction: Double? {
         guard totalBytes > 0 else { return nil }

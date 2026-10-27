@@ -25,7 +25,7 @@ jobs:
           sips -g pixelWidth -g pixelHeight BackgroundDL/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png BackgroundDL/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark-1024.png
       - name: Run byte-range validator tests
         run: |
-          swiftc BackgroundDL/RangeSupport.swift Tests/main.swift -o /tmp/bgdl-range-tests
+          swiftc BackgroundDL/RangeSupport.swift BackgroundDL/Models.swift Tests/main.swift -o /tmp/bgdl-range-tests
           /tmp/bgdl-range-tests
       - name: Check three-tab UI and menu icon regressions
         run: |

@@ -329,10 +329,23 @@ private struct CompactDownloadRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 } else {
-                    Text(item.status == .completed ? "已完成 · \(item.downloadedBytes.readableSize)" : (item.errorMessage ?? stateText))
-                        .font(.caption)
-                        .foregroundStyle(item.status == .failed ? .red : .secondary)
-                        .lineLimit(1)
+                    if item.status == .completed {
+                        Text("已完成 · \(item.downloadedBytes.readableSize)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Text(item.completedAt.map {
+                            "完成于 \($0.formatted(date: .abbreviated, time: .shortened))"
+                        } ?? "历史任务 · 完成时间未记录")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    } else {
+                        Text(item.errorMessage ?? stateText)
+                            .font(.caption)
+                            .foregroundStyle(item.status == .failed ? .red : .secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
             .contentShape(Rectangle())
@@ -498,6 +511,11 @@ private struct DownloadDetailView: View {
                             SegmentedDownloader.shared.contains(id: item.id) ? "HTTP Range 分段" : "系统后台下载")
                         LabeledContent("来源", value: item.sourceLabel)
                         LabeledContent("建立日期", value: item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        if item.status == .completed {
+                            LabeledContent("完成时间", value: item.completedAt.map {
+                                $0.formatted(date: .abbreviated, time: .shortened)
+                            } ?? "旧版没有记录")
+                        }
                         LabeledContent("站点", value: URL(string: item.originalURL)?.host ?? "未知")
                         LabeledContent("保存文件", value: item.savedFilename ?? "尚未完成")
                         if item.status == .completed, store.fileURL(for: item) == nil {
