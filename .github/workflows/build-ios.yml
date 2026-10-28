@@ -57,6 +57,23 @@ jobs:
           assert ".presentationDetents([.height(pendingDeletion.deleteFile ? 226 : 176)])" in ui
           print("PASS: iOS 26 system progress and legacy fallback")
           PY
+      - name: Validate immediate swipe delete and compact list
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path("BackgroundDL/ContentView.swift").read_text()
+          browser = Path("BackgroundDL/BrowserView.swift").read_text()
+          assert "func deleteImmediately(id: UUID, deleteFile: Bool)" in src
+          assert "DownloadDeleteSheet" not in src
+          assert "pendingDeletion" not in src
+          assert "Button { remove(item.status == .completed) }" in src
+          assert "allowsFullSwipe: false" in src
+          assert ".listStyle(.plain)" in src
+          assert ".navigationBarTitleDisplayMode(.inline)" in src
+          assert 'Text("打开分享链接")' in browser
+          assert 'Text("浏览器主页").font(.largeTitle.bold())' not in browser
+          print("PASS: swipe delete without confirmation and compact screens")
+          PY
       - name: Build without code signing
         shell: bash
         run: |

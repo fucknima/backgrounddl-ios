@@ -587,66 +587,104 @@ final class BrowserLibrary: ObservableObject {
 private struct BrowserStartPage: View {
     @ObservedObject private var library = BrowserLibrary.shared
     let open: (URL) -> Void
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("浏览器主页").font(.largeTitle.bold())
-                    Text("粘贴分享链接，或从收藏和最近访问继续。")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    Image(systemName: "link.circle.fill")
+                        .font(.system(size: 35))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.cyan, Color(uiColor: .tertiarySystemFill))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("打开分享链接")
+                            .font(.title3.bold())
+                        Text("粘贴到上方地址栏，网页下载会自动接管")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .padding(.top, 32)
+                .padding(.top, 18)
+
                 if !library.bookmarks.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("收藏网站", systemImage: "star.fill").font(.headline)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))], spacing: 12) {
-                            ForEach(library.bookmarks.prefix(12)) { entry in
+                    VStack(alignment: .leading, spacing: 11) {
+                        Label("收藏", systemImage: "star")
+                            .font(.subheadline.weight(.semibold))
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 104))], spacing: 9) {
+                            ForEach(library.bookmarks.prefix(9)) { entry in
                                 Button {
                                     if let url = URL(string: entry.url) { open(url) }
                                 } label: {
-                                    VStack(spacing: 7) {
-                                        Image(systemName: "globe").font(.title2).foregroundStyle(.cyan)
+                                    VStack(spacing: 6) {
+                                        Image(systemName: "globe")
+                                            .foregroundStyle(.cyan)
+                                            .font(.title3)
                                         Text(URL(string: entry.url)?.host ?? entry.title)
-                                            .font(.caption).lineLimit(1)
+                                            .font(.caption2)
+                                            .lineLimit(1)
                                     }
-                                    .frame(maxWidth: .infinity).padding(13)
-                                    .background(Color(uiColor: .secondarySystemGroupedBackground),
-                                                in: RoundedRectangle(cornerRadius: 17))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                                    .padding(.horizontal, 8)
+                                    .background(
+                                        Color(uiColor: .secondarySystemGroupedBackground),
+                                        in: RoundedRectangle(cornerRadius: 13)
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
                     }
                 }
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("最近访问", systemImage: "clock").font(.headline)
-                    if library.history.isEmpty {
-                        Text("打开网页后，会在这里保留最近访问记录。")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    ForEach(library.history.prefix(10)) { entry in
-                        Button {
-                            if let url = URL(string: entry.url) { open(url) }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "globe").foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(entry.title).font(.subheadline.weight(.medium))
-                                        .lineLimit(1)
-                                    Text(URL(string: entry.url)?.host ?? entry.url)
-                                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+
+                if !library.history.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("最近访问", systemImage: "clock")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.bottom, 4)
+                        ForEach(library.history.prefix(8)) { entry in
+                            Button {
+                                if let url = URL(string: entry.url) { open(url) }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "globe")
+                                        .foregroundStyle(.secondary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(entry.title)
+                                            .font(.subheadline)
+                                            .lineLimit(1)
+                                        Text(URL(string: entry.url)?.host ?? entry.url)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
                                 }
-                                Spacer()
-                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                                .padding(.vertical, 9)
                             }
-                            .padding(.vertical, 8)
+                            .buttonStyle(.plain)
+                            Divider()
                         }
-                        .buttonStyle(.plain)
-                        Divider()
                     }
                 }
+                if library.history.isEmpty && library.bookmarks.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "arrow.down.doc")
+                            .font(.system(size: 32, weight: .ultraLight))
+                            .foregroundStyle(.tertiary)
+                        Text("最近访问和收藏网站会显示在这里")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 56)
+                }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 19)
+            .padding(.bottom, 24)
         }
         .background(Color(uiColor: .systemGroupedBackground))
     }

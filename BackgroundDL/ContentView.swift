@@ -57,13 +57,6 @@ private enum DownloadFilter: String, CaseIterable, Identifiable {
     }
 }
 
-// Confirmation state belongs to the stable screen, never to a swiped or reordered row.
-private struct PendingDeletion {
-    let id: UUID
-    let filename: String
-    let deleteFile: Bool
-}
-
 private struct DetailSelection: Identifiable {
     let id: UUID
 }
@@ -71,7 +64,6 @@ private struct DetailSelection: Identifiable {
 private struct DownloadListView: View {
     @ObservedObject private var store = DownloadStore.shared
     @State private var filter: DownloadFilter = .all
-    @State private var pendingDeletion: PendingDeletion?
     @State private var selectedDetail: DetailSelection?
     @State private var showClearCompleted = false
 
@@ -96,38 +88,44 @@ private struct DownloadListView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                HStack(spacing: 10) {
-                    Label("\(store.runningCount) 项下载中", systemImage: "arrow.down.circle.fill")
+        VStack(spacing: 0) {
+            VStack(spacing: 12) {
+                HStack(alignment: .center, spacing: 6) {
+                    Label("\(store.runningCount) 下载中", systemImage: "arrow.down.circle")
                         .foregroundStyle(.primary)
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 6)
                     Label(store.aggregateSpeedLabel, systemImage: "speedometer")
                         .foregroundStyle(.secondary)
+                    Spacer(minLength: 6)
+                    Text("\(store.completedCount) 已完成")
+                        .foregroundStyle(.secondary)
                 }
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .listRowBackground(Color.clear)
-                .padding(.vertical, 2)
-
+                .font(.caption.weight(.medium))
+                .monospacedDigit()
                 Picker("状态", selection: $filter) {
                     ForEach(DownloadFilter.allCases) { choice in
                         Text(choice.rawValue).tag(choice)
                     }
                 }
                 .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
+                .accessibilityIdentifier("downloadFilter")
             }
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .background(Color(uiColor: .secondarySystemBackground))
+
             if visibleItems.isEmpty {
-                Section {
-                    ContentUnavailableView(filter == .all ? "暂无下载" : "暂无相关任务",
-                                           systemImage: "arrow.down.doc",
-                                           description: Text("在浏览器中打开分享链接，点击网页下载即可。"))
-                        .frame(maxWidth: .infinity)
-                        .listRowBackground(Color.clear)
-                }
+                Spacer(minLength: 20)
+                ContentUnavailableView(
+                    searchText.isEmpty ? (filter == .all ? "暂无下载" : "没有相关任务") : "没有匹配的下载",
+                    systemImage: searchText.isEmpty ? "arrow.down.doc" : "magnifyingglass",
+                    description: Text(searchText.isEmpty ? "打开分享链接或添加 HTTPS 直链即可开始下载。" : "试试其他文件名。")
+                )
+                .frame(maxWidth: .infinity)
+                Spacer()
             } else {
-                Section {
+                List {
                     ForEach(visibleItems) { item in
                         CompactDownloadRow(item: item,
                                            fileURL: store.fileURL(for: item),
@@ -135,26 +133,19 @@ private struct DownloadListView: View {
                                            resume: { DownloadCoordinator.shared.changeState(id: item.id, action: .resume) },
                                            cancel: { DownloadCoordinator.shared.changeState(id: item.id, action: .cancel) },
                                            retry: { retry(item) },
-                                           requestRemove: { deleteFile in requestRemoval(id: item.id, filename: item.filename, deleteFile: deleteFile) },
+                                           remove: { deleteFile in deleteImmediately(id: item.id, deleteFile: deleteFile) },
                                            openDetails: { selectedDetail = DetailSelection(id: item.id) },
                                            rename: { name in try store.renameCompleted(id: item.id, to: name) })
+                        .listRowInsets(EdgeInsets(top: 7, leading: 18, bottom: 7, trailing: 18))
                     }
-                } header: {
-                    HStack {
-                        Text("下载任务")
-                        Spacer()
-                        Text("\(visibleItems.count) 项")
-                    }
-                } footer: {
-                    Text("左滑可暂停、继续或删除；长按任务可管理文件。")
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Color(uiColor: .systemBackground))
         .navigationTitle("下载")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -195,21 +186,6 @@ private struct DownloadListView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("清理记录不删除本地文件，删除文件后不可恢复。")
-        }
-        .sheet(isPresented: Binding(
-            get: { pendingDeletion != nil },
-            set: { if !$0 { pendingDeletion = nil } }
-        )) {
-            if let pendingDeletion {
-                DownloadDeleteSheet(
-                    filename: pendingDeletion.filename,
-                    deleteFileAvailable: pendingDeletion.deleteFile,
-                    remove: { removeLocalFile in confirmRemoval(deleteFile: removeLocalFile) },
-                    cancel: { self.pendingDeletion = nil }
-                )
-                .presentationDetents([.height(pendingDeletion.deleteFile ? 226 : 176)])
-                .presentationDragIndicator(.visible)
-            }
         }
         .sheet(item: $selectedDetail) { selection in
             NavigationStack { DownloadDetailView(itemID: selection.id) }
@@ -253,18 +229,10 @@ private struct DownloadListView: View {
                                              name: item.filename, source: .direct)
     }
 
-    @MainActor private func requestRemoval(id: UUID, filename: String, deleteFile: Bool) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.17) {
-            guard store.items.contains(where: { $0.id == id }) else { return }
-            pendingDeletion = PendingDeletion(id: id, filename: filename, deleteFile: deleteFile)
-        }
-    }
-
-    @MainActor private func confirmRemoval(deleteFile: Bool) {
-        guard let id = pendingDeletion?.id else { return }
-        pendingDeletion = nil
-        // Dismiss the stable sheet before mutating the underlying List.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+    @MainActor private func deleteImmediately(id: UUID, deleteFile: Bool) {
+        // No confirmation: wait until the swipe action has dismissed, then remove
+        // by stable UUID; if deleting the actual file fails, retain its record.
+        DispatchQueue.main.async {
             guard store.items.contains(where: { $0.id == id }) else { return }
             do { try DownloadCoordinator.shared.remove(id: id, deleteFile: deleteFile) }
             catch { show(error) }
@@ -284,7 +252,7 @@ private struct CompactDownloadRow: View {
     let resume: () -> Void
     let cancel: () -> Void
     let retry: () -> Void
-    let requestRemove: (Bool) -> Void
+    let remove: (Bool) -> Void
     let openDetails: () -> Void
     let rename: (String) throws -> Void
 
@@ -330,16 +298,19 @@ private struct CompactDownloadRow: View {
                     .minimumScaleFactor(0.75)
                 } else {
                     if item.status == .completed {
-                        Text("已完成 · \(item.downloadedBytes.readableSize)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Text(item.completedAt.map {
-                            "完成于 \($0.formatted(date: .abbreviated, time: .shortened))"
-                        } ?? "历史任务 · 完成时间未记录")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text("已完成 · \(item.downloadedBytes.readableSize)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 4)
+                            Text(item.completedAt.map {
+                                $0.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())
+                            } ?? "时间未知")
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                        }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                     } else {
                         Text(item.errorMessage ?? stateText)
                             .font(.caption)
@@ -365,11 +336,11 @@ private struct CompactDownloadRow: View {
                         ShareLink(item: fileURL) { Label("分享文件", systemImage: "square.and.arrow.up") }
                     }
                 }
-                Button { requestRemove(false) } label: {
+                Button { remove(false) } label: {
                     Label("移除记录", systemImage: "trash")
                 }
                 if item.status == .completed {
-                    Button { requestRemove(true) } label: {
+                    Button { remove(true) } label: {
                         Label("删除文件和记录", systemImage: "trash.fill")
                     }
                 }
@@ -389,17 +360,16 @@ private struct CompactDownloadRow: View {
             if item.status == .completed {
                 Button("重命名") { newName = item.savedFilename ?? item.filename; showRename = true }
             }
-            Button("仅移除记录") { requestRemove(false) }
+            Button("仅移除记录") { remove(false) }
             if item.status == .completed {
-                Button("删除本地文件与记录") { requestRemove(true) }
+                Button("删除本地文件与记录") { remove(true) }
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            // This is a request, not an immediate destructive mutation.
-            // Do not use role: .destructive here: SwiftUI can animate/remove a row
-            // while the confirmation dialog is still being presented.
-            Button { requestRemove(item.status == .completed) } label: {
-                Label(item.status == .completed ? "删除文件" : "移除任务", systemImage: "trash")
+            // A single tap deletes immediately; keeping full swipe disabled avoids
+            // accidentally deleting the local file with an uncontrolled gesture.
+            Button { remove(item.status == .completed) } label: {
+                Label(item.status == .completed ? "删除" : "移除", systemImage: "trash")
             }
             .tint(.red)
             if item.status == .running { Button("暂停", action: pause).tint(.orange) }
@@ -424,64 +394,6 @@ private struct CompactDownloadRow: View {
         }
     }
     private func report(_ error: Error) { errorText = error.localizedDescription; showError = true }
-}
-
-private struct DownloadDeleteSheet: View {
-    let filename: String
-    let deleteFileAvailable: Bool
-    let remove: (Bool) -> Void
-    let cancel: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("管理下载任务")
-                        .font(.headline)
-                    Text(filename)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer(minLength: 8)
-                Button(action: cancel) {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                        .background(.quaternary, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("关闭")
-            }
-            .padding(.top, 16)
-            .padding(.bottom, 12)
-
-            if deleteFileAvailable {
-                Divider()
-                Button(role: .destructive) { remove(true) } label: {
-                    Label("删除本地文件与记录", systemImage: "trash")
-                        .font(.subheadline.weight(.medium))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 48)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.red)
-            }
-            Divider()
-            Button { remove(false) } label: {
-                Label("仅移除记录", systemImage: "list.bullet")
-                    .font(.subheadline.weight(.medium))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: 48)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-        }
-        .padding(.horizontal, 22)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
 }
 
 // A task is inspected by immutable UUID; every statistic is resolved from the live
