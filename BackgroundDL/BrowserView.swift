@@ -66,6 +66,7 @@ final class BrowserState: ObservableObject {
 
 struct BrowserView: View {
     let sharedURL: URL?
+    let openDownloads: () -> Void
     @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
@@ -115,22 +116,51 @@ struct BrowserView: View {
             .padding(.vertical, 8)
 
             if !state.notice.isEmpty {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .foregroundStyle(.cyan)
-                    Text(state.notice)
-                        .lineLimit(2)
-                    Spacer(minLength: 4)
+                HStack(spacing: 10) {
+                    Button {
+                        // Dismiss before switching tabs so stale notices are not
+                        // shown when the user returns to the browser.
+                        state.notice = ""
+                        openDownloads()
+                    } label: {
+                        HStack(spacing: 9) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundStyle(.cyan)
+                                .font(.subheadline)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(state.notice)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .foregroundStyle(.primary)
+                                Text("点击查看下载进度")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 6)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("查看已接管的下载任务")
+                    .accessibilityIdentifier("capturedDownloadNotice")
                     Button {
                         state.notice = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, height: 34)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("关闭提示")
                 }
                 .font(.caption)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 9)
+                .padding(.vertical, 8)
                 .background(.thinMaterial)
             }
 
@@ -520,7 +550,7 @@ private struct BrowserWebView: UIViewRepresentable {
                 let fallback = last.isEmpty || last == "/" || last == "download" || last == "uc" ? "下载文件_\(UUID().uuidString.prefix(8))" : last
                 let name = (suggestedName?.isEmpty == false && suggestedName != "download") ? suggestedName! : fallback
                 DownloadCoordinator.shared.enqueue(request: request, originalURL: url.absoluteString, name: name, source: .browser)
-                state.notice = "已接管：\(name)。切到“下载”页查看速度、预计完成时间与进度。"
+                state.notice = "已接管：\(name)"
             }
         }
     }

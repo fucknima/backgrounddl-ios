@@ -74,6 +74,21 @@ jobs:
           assert 'Text("浏览器主页").font(.largeTitle.bold())' not in browser
           print("PASS: swipe delete without confirmation and compact screens")
           PY
+      - name: Validate captured download banner navigation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("BackgroundDL/ContentView.swift").read_text()
+          browser = Path("BackgroundDL/BrowserView.swift").read_text()
+          assert "BrowserView(sharedURL: sharedURL, openDownloads:" in root
+          assert "selectedTab = .downloads" in root
+          assert "let openDownloads: () -> Void" in browser
+          assert 'state.notice = ""\n                        openDownloads()' in browser
+          assert "capturedDownloadNotice" in browser
+          assert 'Text("点击查看下载进度")' in browser
+          assert 'state.notice = "已接管：' in browser
+          print("PASS: tap captured-download notice switches tab and clears banner")
+          PY
       - name: Build without code signing
         shell: bash
         run: |

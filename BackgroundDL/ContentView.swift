@@ -12,7 +12,11 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack { BrowserView(sharedURL: sharedURL) }
+            NavigationStack {
+                BrowserView(sharedURL: sharedURL, openDownloads: {
+                    selectedTab = .downloads
+                })
+            }
                 .tabItem { Label("浏览器", systemImage: "safari") }
                 .tag(MainTab.browser)
             NavigationStack { DownloadListView() }
