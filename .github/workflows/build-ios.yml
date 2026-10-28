@@ -53,8 +53,8 @@ jobs:
           assert "Activity<DownloadActivityAttributes>.activities" in src
           assert "BGContinuedProcessingTaskRequest" in src
           ui = Path("BackgroundDL/ContentView.swift").read_text()
-          assert 'Label("仅移除记录", systemImage: "list.bullet")' in ui
-          assert ".presentationDetents([.height(pendingDeletion.deleteFile ? 226 : 176)])" in ui
+          assert "DownloadDeleteSheet" not in ui
+          assert "pendingDeletion" not in ui
           print("PASS: iOS 26 system progress and legacy fallback")
           PY
       - name: Validate immediate swipe delete and compact list
