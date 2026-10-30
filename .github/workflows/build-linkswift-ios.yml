@@ -1,0 +1,49 @@
+name: Build LinkSwift iOS
+on:
+  push:
+    branches: [linkswift-ios]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null; then brew install xcodegen; fi
+          xcodebuild -version
+      - name: Download upstream LinkSwift and apply native adapter
+        run: |
+          cd linkswift-ios
+          bash bootstrap.sh
+      - name: Generate Xcode project
+        run: |
+          cd linkswift-ios
+          xcodegen generate
+          xcrun swiftc -frontend -parse Sources/*.swift
+      - name: Build unsigned iOS app
+        run: |
+          cd linkswift-ios
+          set -o pipefail
+          xcodebuild -project LinkSwiftIOS.xcodeproj -scheme LinkSwift \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build | tee build.log
+      - name: Package IPA
+        run: |
+          cd linkswift-ios
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/LinkSwift.app Payload/
+          zip -qry LinkSwift-unsigned.ipa Payload
+          shasum -a 256 LinkSwift-unsigned.ipa > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LinkSwift-iOS-build
+          path: |
+            linkswift-ios/LinkSwift-unsigned.ipa
+            linkswift-ios/SHA256SUMS
+            linkswift-ios/build.log
+          retention-days: 14
