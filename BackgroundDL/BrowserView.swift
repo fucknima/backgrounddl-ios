@@ -71,6 +71,7 @@ struct BrowserView: View {
     let openDownloads: () -> Void
     let openSettings: () -> Void
     let onScrollHideChange: (Bool) -> Void
+    let barHidden: Bool
     let incomingLinkRevision: UUID
     let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @FocusState private var isEditingAddress: Bool
@@ -83,7 +84,8 @@ struct BrowserView: View {
             addressBar
             if !state.notice.isEmpty { noticeCard }
             ZStack {
-                BrowserWebView(state: state, appearanceMode: webAppearanceMode, onScrollHideChange: onScrollHideChange)
+                BrowserWebView(state: state, appearanceMode: webAppearanceMode,
+                           onScrollHideChange: onScrollHideChange, barHidden: barHidden)
                 if state.isHome {
                     BrowserStartPage(open: { url in
                         state.loadSharedURL(url)
@@ -96,13 +98,13 @@ struct BrowserView: View {
             }
         }
         .background(AppTheme.pageBackground)
+        .ignoresSafeArea(.container, edges: .bottom)
         .onAppear {
             if let sharedURL { state.loadSharedURL(sharedURL) }
         }
         .onChange(of: incomingLinkRevision) { _, _ in
             if let sharedURL { state.loadSharedURL(sharedURL) }
         }
-        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showHistory) {
             NavigationStack {
                 BrowserHistoryView(open: { url in
@@ -264,6 +266,7 @@ private struct BrowserWebView: UIViewRepresentable {
     @ObservedObject var state: BrowserState
     let appearanceMode: String
     let onScrollHideChange: (Bool) -> Void
+    let barHidden: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     // Inject at document start so sites with white backgrounds do not first paint an
@@ -394,6 +397,7 @@ private struct BrowserWebView: UIViewRepresentable {
         browser.allowsBackForwardNavigationGestures = true
         browser.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
         browser.isOpaque = false
+        browser.scrollView.contentInsetAdjustmentBehavior = .never
         browser.backgroundColor = .systemBackground
         browser.underPageBackgroundColor = .systemBackground
         state.webView = browser
@@ -408,6 +412,7 @@ private struct BrowserWebView: UIViewRepresentable {
         context.coordinator.appearanceMode = appearanceMode
         context.coordinator.systemDark = colorScheme == .dark
         context.coordinator.onScrollHideChange = onScrollHideChange
+        context.coordinator.syncBarHidden(barHidden, scrollView: browser.scrollView)
         context.coordinator.syncPageTheme(webView: browser)
     }
 
@@ -419,7 +424,7 @@ private struct BrowserWebView: UIViewRepresentable {
         var onScrollHideChange: (Bool) -> Void
         private var lastAppearance = ""
         private var scrollObservation: NSKeyValueObservation?
-        private var lastOffsetY: CGFloat = 0
+        private var anchorY: CGFloat = 0
         private var lastHidden = false
 
         init(state: BrowserState, appearanceMode: String, systemDark: Bool,
@@ -430,26 +435,37 @@ private struct BrowserWebView: UIViewRepresentable {
             self.onScrollHideChange = onScrollHideChange
         }
 
+        func syncBarHidden(_ hidden: Bool, scrollView: UIScrollView) {
+            guard hidden != lastHidden else { return }
+            lastHidden = hidden
+            anchorY = scrollView.contentOffset.y
+        }
+
         func observe(_ scrollView: UIScrollView) {
+            anchorY = scrollView.contentOffset.y
             scrollObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
                 let y = scroll.contentOffset.y
                 DispatchQueue.main.async {
                     guard let self else { return }
-                    let delta = y - self.lastOffsetY
-                    self.lastOffsetY = y
-                    let shouldHide: Bool
-                    if y <= 6 {
-                        shouldHide = false
-                    } else if delta > 4 {
-                        shouldHide = true
-                    } else if delta < -4 {
-                        shouldHide = false
-                    } else {
+                    if y <= 8 {
+                        self.anchorY = y
+                        if self.lastHidden {
+                            self.lastHidden = false
+                            self.onScrollHideChange(false)
+                        }
                         return
                     }
-                    guard shouldHide != self.lastHidden else { return }
-                    self.lastHidden = shouldHide
-                    self.onScrollHideChange(shouldHide)
+                    if self.lastHidden {
+                        if self.anchorY - y > 24 {
+                            self.lastHidden = false
+                            self.anchorY = y
+                            self.onScrollHideChange(false)
+                        }
+                    } else if y - self.anchorY > 40 && y > 80 {
+                        self.lastHidden = true
+                        self.anchorY = y
+                        self.onScrollHideChange(true)
+                    }
                 }
             }
         }

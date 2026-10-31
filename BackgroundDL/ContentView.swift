@@ -34,19 +34,14 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                NavigationStack {
-                    BrowserView(state: browserState,
-                                sharedURL: sharedURL,
-                                openDownloads: { selectedTab = .downloads },
-                                openSettings: { selectedTab = .settings },
-                                onScrollHideChange: { hidden in
-                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) {
-                                        browserBarHidden = hidden
-                                    }
-                                },
-                                incomingLinkRevision: incomingLinkRevision,
-                                acceptDroppedProviders: { providers in importDrop(providers) })
-                }
+                BrowserView(state: browserState,
+                            sharedURL: sharedURL,
+                            openDownloads: { selectedTab = .downloads },
+                            openSettings: { selectedTab = .settings },
+                            onScrollHideChange: { browserBarHidden = $0 },
+                            barHidden: browserBarHidden,
+                            incomingLinkRevision: incomingLinkRevision,
+                            acceptDroppedProviders: { providers in importDrop(providers) })
                     .tabItem { Label("浏览器", systemImage: "safari") }
                     .tag(MainTab.browser)
                     .toolbar(.hidden, for: .tabBar)
@@ -63,14 +58,16 @@ struct ContentView: View {
             .toolbar(.hidden, for: .tabBar)
             .ignoresSafeArea(.container, edges: .bottom)
 
-            if !keyboardVisible && !browserBarHidden {
-                AppBottomBar(selectedTab: $selectedTab,
-                             browser: browserState,
-                             openDownloads: { selectedTab = .downloads })
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 4)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            AppBottomBar(selectedTab: $selectedTab,
+                         browser: browserState,
+                         openDownloads: { selectedTab = .downloads })
+                .padding(.horizontal, 18)
+                .padding(.bottom, 4)
+                .offset(y: (keyboardVisible || browserBarHidden) ? 120 : 0)
+                .opacity((keyboardVisible || browserBarHidden) ? 0 : 1)
+                .allowsHitTesting(!(keyboardVisible || browserBarHidden))
+                .animation(.spring(response: 0.42, dampingFraction: 0.88), value: keyboardVisible)
+                .animation(.spring(response: 0.42, dampingFraction: 0.88), value: browserBarHidden)
         }
         // Receives system-delivered URL documents, including candidates dropped
         // onto the app icon when iOS elects to dispatch them to third-party apps.
@@ -136,13 +133,13 @@ struct ContentView: View {
             }
         }
         .onChange(of: selectedTab) { _, _ in
-            withAnimation(.easeOut(duration: 0.2)) { browserBarHidden = false }
+            browserBarHidden = false
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = true }
+            keyboardVisible = true
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = false }
+            keyboardVisible = false
         }
     }
 
