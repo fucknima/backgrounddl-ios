@@ -171,3 +171,9 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 本次在 `Info.plist` 新增 `CFBundleURLTypes` 的 `http` / `https` 方案，保留 `public.url` 文档声明以继续接受图标拖放。Swift 侧入口无需改动：`App 启动参数`、`AppDelegate openURL`、`Scene 冷启动`、`Scene openURLContexts`、`NSUserActivity` 都已接好。
 - 平台边界：`com.apple.developer.web-browser` 由 Apple 审批，侧载无法取得。如果系统只把网页链接交给默认浏览器，这次构建的表现为「图标亮、App 开、没有链接」，诊断里的 URL 计数仍为 0。判定方式是装 2.1.1 后做一次图标拖放，再看「设置 → 拖放诊断」。
 - 若计数为 0，改走 Safari 扩展按钮或快捷指令入口；仓库里已有 Safari 扩展的构建流水线。
+
+## 2.1.2 · URL 类型补必需角色与反向域名
+
+- 2.1.1 真机日志：图标拖放触发的是冷启动，`场景配置请求` 与 `Scene 冷启动` 的 URL、用户活动计数都是 0。系统只启动了 App，没有投递链接。
+- Apple 的 `CFBundleURLTypes` 文档把 `CFBundleTypeRole` 标为必需键；2.1.1 缺这个键，URL 类型可能没有被 LaunchServices 接受。本次补 `Viewer`，并把 `CFBundleURLName` 改为反向域名 `com.example.backgrounddl.web`。
+- 仍是判定版本：若计数继续为 0，说明 iOS 只把网页链接交给默认浏览器，侧载拿不到 `com.apple.developer.web-browser`，图标拖放到此为止，改走 Safari 扩展按钮。

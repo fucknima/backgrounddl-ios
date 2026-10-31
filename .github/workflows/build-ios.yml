@@ -97,9 +97,11 @@ jobs:
           plist = plistlib.loads(Path("BackgroundDL/Info.plist").read_bytes())
           assert any("public.url" in entry["LSItemContentTypes"]
                      for entry in plist["CFBundleDocumentTypes"])
-          schemes = {scheme for entry in plist.get("CFBundleURLTypes", [])
-                     for scheme in entry.get("CFBundleURLSchemes", [])}
-          assert {"http", "https"} <= schemes
+          web = [entry for entry in plist.get("CFBundleURLTypes", [])
+                 if "http" in entry.get("CFBundleURLSchemes", [])]
+          assert web, "missing http URL type"
+          assert all(entry.get("CFBundleTypeRole") in {"Viewer", "Editor"} for entry in web)
+          assert {"http", "https"} <= {scheme for entry in web for scheme in entry["CFBundleURLSchemes"]}
           app = Path("BackgroundDL/ContentView.swift").read_text()
           browser = Path("BackgroundDL/BrowserView.swift").read_text()
           assert '.onOpenURL { url in incomingRouter.receive(url, from: "SwiftUI onOpenURL") }' in app

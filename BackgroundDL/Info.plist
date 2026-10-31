@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.1.1</string>
+	<string>2.1.2</string>
 	<key>CFBundleVersion</key>
-	<string>26</string>
+	<string>27</string>
 	<!-- Experimental system document type for URL drops onto app icon.
          This only advertises support; SpringBoard controls icon drop behavior. -->
 	<key>CFBundleDocumentTypes</key>
@@ -43,7 +43,9 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>网页链接</string>
+			<string>com.example.backgrounddl.web</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>http</string>
