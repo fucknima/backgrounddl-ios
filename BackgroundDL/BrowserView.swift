@@ -78,98 +78,8 @@ struct BrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // One compact address row, rather than a redundant headline and instruction card.
-            HStack(spacing: 9) {
-                Image(systemName: "lock.shield")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                TextField("搜索或粘贴分享链接", text: $state.address)
-                    .font(.subheadline)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($isEditingAddress)
-                    .submitLabel(.go)
-                    .onSubmit(open)
-                    .accessibilityIdentifier("browserAddress")
-                if isEditingAddress && !state.address.isEmpty {
-                    Button {
-                        state.address = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel("清空地址")
-                }
-                Button(action: open) {
-                    Text("前往")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.cyan)
-                .disabled(state.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(.leading, 15)
-            .padding(.trailing, 6)
-            .padding(.vertical, 6)
-            .background(.regularMaterial, in: Capsule())
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
-            if !state.notice.isEmpty {
-                HStack(spacing: 10) {
-                    Button {
-                        // Dismiss before switching tabs so stale notices are not
-                        // shown when the user returns to the browser.
-                        state.notice = ""
-                        openDownloads()
-                    } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .foregroundStyle(.cyan)
-                                .font(.subheadline)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(state.notice)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .foregroundStyle(.primary)
-                                Text("点击查看下载进度")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 6)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("查看已接管的下载任务")
-                    .accessibilityIdentifier("capturedDownloadNotice")
-                    Button {
-                        state.notice = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 30, height: 34)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("关闭提示")
-                }
-                .font(.caption)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.thinMaterial)
-            }
-
-            Rectangle().fill(Color(uiColor: .separator).opacity(0.35)).frame(height: 0.5)
-
-            // Let the actual website occupy almost all vertical space.
+            addressBar
+            if !state.notice.isEmpty { noticeCard }
             ZStack {
                 BrowserWebView(state: state, appearanceMode: webAppearanceMode)
                 if state.isHome {
@@ -179,73 +89,12 @@ struct BrowserView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // The WKWebView fills most of the screen and can otherwise absorb
-            // drops before the TabView-level handler has a chance to see them.
             .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) {
                 acceptDroppedProviders($0)
             }
-
-            HStack(spacing: 18) {
-                Button { state.goHome() } label: { Image(systemName: "house") }
-                    .accessibilityLabel("主页")
-                Button { state.webView?.goBack() } label: { Image(systemName: "chevron.left") }
-                    .disabled(!state.canGoBack)
-                    .accessibilityLabel("返回")
-                Button { state.webView?.goForward() } label: { Image(systemName: "chevron.right") }
-                    .disabled(!state.canGoForward)
-                    .accessibilityLabel("前进")
-                Button { state.webView?.reload() } label: { Image(systemName: "arrow.clockwise") }
-                    .disabled(state.webView?.url == nil)
-                    .accessibilityLabel("刷新")
-                Spacer(minLength: 8)
-                if state.isLoading {
-                    ProgressView().controlSize(.small)
-                }
-                Text(state.currentTitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: 120, alignment: .trailing)
-                Menu {
-                    if let url = state.webView?.url, url.scheme == "https" {
-                        Button {
-                            library.toggleBookmark(url: url, title: state.currentTitle)
-                        } label: {
-                            Label(library.isBookmarked(url) ? "取消收藏此网页" : "收藏此网页",
-                                  systemImage: library.isBookmarked(url) ? "star.slash" : "star")
-                        }
-                    }
-                    Button { showHistory = true } label: {
-                        Label("浏览历史", systemImage: "clock.arrow.circlepath")
-                    }
-                    Divider()
-                    Button {
-                        webAppearanceMode = "auto"
-                    } label: {
-                        Label("智能深色（推荐）", systemImage: webAppearanceMode == "auto" ? "checkmark.circle.fill" : "moon.stars")
-                    }
-                    Button {
-                        webAppearanceMode = "always"
-                    } label: {
-                        Label("始终深色", systemImage: webAppearanceMode == "always" ? "checkmark.circle.fill" : "moon.fill")
-                    }
-                    Button {
-                        webAppearanceMode = "off"
-                    } label: {
-                        Label("网站原样", systemImage: webAppearanceMode == "off" ? "checkmark.circle.fill" : "sun.max")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("网页外观")
-            }
-            .font(.body.weight(.semibold))
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.regularMaterial)
+            bottomBar
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(AppTheme.pageBackground)
         .onAppear {
             if let sharedURL { state.loadSharedURL(sharedURL) }
         }
@@ -264,6 +113,168 @@ struct BrowserView: View {
         .alert("网页提示", isPresented: $state.showMessage) {
             Button("确定", role: .cancel) { }
         } message: { Text(state.message) }
+    }
+
+    private var addressBar: some View {
+        HStack(spacing: 9) {
+            Image(systemName: state.isHome ? "globe" : "lock.shield.fill")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(state.isHome ? Color.secondary : AppTheme.accent)
+            TextField("搜索或粘贴链接", text: $state.address)
+                .font(.subheadline)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($isEditingAddress)
+                .submitLabel(.go)
+                .onSubmit(open)
+                .accessibilityIdentifier("browserAddress")
+            if state.isLoading {
+                ProgressView().controlSize(.small)
+            }
+            if isEditingAddress && !state.address.isEmpty {
+                Button {
+                    state.address = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("清空地址")
+            }
+            if !state.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button(action: open) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(AppTheme.accent)
+                }
+                .accessibilityLabel("前往")
+            }
+            Menu {
+                if let url = state.webView?.url, url.scheme == "https" {
+                    Button {
+                        library.toggleBookmark(url: url, title: state.currentTitle)
+                    } label: {
+                        Label(library.isBookmarked(url) ? "取消收藏此网页" : "收藏此网页",
+                              systemImage: library.isBookmarked(url) ? "star.slash" : "star")
+                    }
+                }
+                Button { showHistory = true } label: {
+                    Label("浏览历史", systemImage: "clock.arrow.circlepath")
+                }
+                Divider()
+                Button {
+                    webAppearanceMode = "auto"
+                } label: {
+                    Label("智能深色（推荐）", systemImage: webAppearanceMode == "auto" ? "checkmark.circle.fill" : "moon.stars")
+                }
+                Button {
+                    webAppearanceMode = "always"
+                } label: {
+                    Label("始终深色", systemImage: webAppearanceMode == "always" ? "checkmark.circle.fill" : "moon.fill")
+                }
+                Button {
+                    webAppearanceMode = "off"
+                } label: {
+                    Label("网站原样", systemImage: webAppearanceMode == "off" ? "checkmark.circle.fill" : "sun.max")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 26, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("网页菜单")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.regularMaterial, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(AppTheme.border)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
+    }
+
+    private var noticeCard: some View {
+        HStack(spacing: 10) {
+            Button {
+                state.notice = ""
+                openDownloads()
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(AppTheme.accent)
+                        .font(.subheadline)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(state.notice)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text("点击查看下载进度")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("查看已接管的下载任务")
+            .accessibilityIdentifier("capturedDownloadNotice")
+            Button {
+                state.notice = ""
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("关闭提示")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(AppTheme.border)
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 0) {
+            navButton("chevron.left", enabled: state.canGoBack) { state.webView?.goBack() }
+            navButton("chevron.right", enabled: state.canGoForward) { state.webView?.goForward() }
+            navButton("house", enabled: true) { state.goHome() }
+            navButton("arrow.clockwise", enabled: state.webView?.url != nil) { state.webView?.reload() }
+            navButton("arrow.down.circle", enabled: true) { openDownloads() }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(.regularMaterial, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(AppTheme.border)
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
+    }
+
+    private func navButton(_ systemImage: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.35))
+        .disabled(!enabled)
     }
 
     private func open() {
@@ -628,103 +639,155 @@ private struct BrowserStartPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 12) {
-                    Image(systemName: "link.circle.fill")
-                        .font(.system(size: 35))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.cyan, Color(uiColor: .tertiarySystemFill))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("打开分享链接")
-                            .font(.title3.bold())
-                        Text("粘贴到上方地址栏，网页下载会自动接管")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.top, 18)
+            VStack(alignment: .leading, spacing: 24) {
+                hero
+                if !library.bookmarks.isEmpty { bookmarks }
+                if !library.history.isEmpty { recent }
+                if library.history.isEmpty && library.bookmarks.isEmpty { empty }
+            }
+            .padding(.horizontal, AppTheme.pagePadding)
+            .padding(.vertical, 18)
+        }
+        .background(AppTheme.pageBackground)
+    }
 
-                if !library.bookmarks.isEmpty {
-                    VStack(alignment: .leading, spacing: 11) {
-                        Label("收藏", systemImage: "star")
-                            .font(.subheadline.weight(.semibold))
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 104))], spacing: 9) {
-                            ForEach(library.bookmarks.prefix(9)) { entry in
-                                Button {
-                                    if let url = URL(string: entry.url) { open(url) }
-                                } label: {
-                                    VStack(spacing: 6) {
-                                        Image(systemName: "globe")
-                                            .foregroundStyle(.cyan)
-                                            .font(.title3)
-                                        Text(URL(string: entry.url)?.host ?? entry.title)
-                                            .font(.caption2)
-                                            .lineLimit(1)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 13)
-                                    .padding(.horizontal, 8)
-                                    .background(
-                                        Color(uiColor: .secondarySystemGroupedBackground),
-                                        in: RoundedRectangle(cornerRadius: 13)
-                                    )
-                                }
-                                .buttonStyle(.plain)
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: "bolt.horizontal.circle.fill")
+                .font(.system(size: 40, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+            Text("把链接变成下载")
+                .font(.title2.bold())
+            Text("粘贴、拖入或分享链接，网页里的文件会交给后台下载。")
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.86))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Color(red: 0.04, green: 0.64, blue: 0.80), Color(red: 0.07, green: 0.42, blue: 0.86)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
+    }
+
+    private var bookmarks: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("收藏", icon: "star.fill")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
+                ForEach(library.bookmarks.prefix(9)) { entry in
+                    Button {
+                        if let url = URL(string: entry.url) { open(url) }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text(initial(entry))
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(AppTheme.accent)
+                                .frame(width: 34, height: 34)
+                                .background(AppTheme.accent.opacity(0.12),
+                                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(displayTitle(entry))
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                                Text(host(entry))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(10)
+                        .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(AppTheme.border)
                         }
                     }
-                }
-
-                if !library.history.isEmpty {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Label("最近访问", systemImage: "clock")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.bottom, 4)
-                        ForEach(library.history.prefix(8)) { entry in
-                            Button {
-                                if let url = URL(string: entry.url) { open(url) }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "globe")
-                                        .foregroundStyle(.secondary)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(entry.title)
-                                            .font(.subheadline)
-                                            .lineLimit(1)
-                                        Text(URL(string: entry.url)?.host ?? entry.url)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .padding(.vertical, 9)
-                            }
-                            .buttonStyle(.plain)
-                            Divider()
-                        }
-                    }
-                }
-                if library.history.isEmpty && library.bookmarks.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: "arrow.down.doc")
-                            .font(.system(size: 32, weight: .ultraLight))
-                            .foregroundStyle(.tertiary)
-                        Text("最近访问和收藏网站会显示在这里")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 56)
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 19)
-            .padding(.bottom, 24)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private var recent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("最近访问", icon: "clock.fill")
+            VStack(spacing: 0) {
+                ForEach(library.history.prefix(8)) { entry in
+                    Button {
+                        if let url = URL(string: entry.url) { open(url) }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "globe")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 28, height: 28)
+                                .background(Color.primary.opacity(0.05), in: Circle())
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(displayTitle(entry))
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                Text(host(entry))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 11)
+                    }
+                    .buttonStyle(.plain)
+                    if entry.id != library.history.prefix(8).last?.id {
+                        Divider().padding(.leading, 54)
+                    }
+                }
+            }
+            .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(AppTheme.border)
+            }
+        }
+    }
+
+    private var empty: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("收藏和最近访问会显示在这里")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+    }
+
+    private func sectionTitle(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.subheadline.weight(.semibold))
+    }
+
+    private func host(_ entry: BrowserEntry) -> String {
+        URL(string: entry.url)?.host ?? entry.url
+    }
+
+    private func displayTitle(_ entry: BrowserEntry) -> String {
+        entry.title.isEmpty ? host(entry) : entry.title
+    }
+
+    private func initial(_ entry: BrowserEntry) -> String {
+        String(host(entry).replacingOccurrences(of: "www.", with: "").prefix(1)).uppercased()
     }
 }
 

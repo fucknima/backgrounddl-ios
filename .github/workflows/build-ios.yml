@@ -71,7 +71,7 @@ jobs:
           assert "CompactDownloadRow(" in src
           assert "settingsCard(" in src
           assert ".navigationBarTitleDisplayMode(.inline)" in src
-          assert 'Text("打开分享链接")' in browser
+          assert 'Text("把链接变成下载")' in browser
           assert 'Text("浏览器主页").font(.largeTitle.bold())' not in browser
           print("PASS: scroll-view pages, delete path and compact screens")
           PY
@@ -84,7 +84,7 @@ jobs:
           assert "BrowserView(sharedURL: sharedURL, openDownloads:" in root
           assert "selectedTab = .downloads" in root
           assert "let openDownloads: () -> Void" in browser
-          assert 'state.notice = ""\n                        openDownloads()' in browser
+          assert 'state.notice = ""\n                openDownloads()' in browser
           assert "capturedDownloadNotice" in browser
           assert 'Text("点击查看下载进度")' in browser
           assert 'state.notice = "已接管：' in browser
