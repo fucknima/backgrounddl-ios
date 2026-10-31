@@ -104,9 +104,10 @@ jobs:
           app = Path("BackgroundDL/ContentView.swift").read_text()
           browser = Path("BackgroundDL/BrowserView.swift").read_text()
           assert '.onOpenURL { url in incomingRouter.receive(url, from: "SwiftUI onOpenURL") }' in app
-          assert "DownloadListView(acceptDroppedProviders:" in app
-          assert "DownloadSettingsView(acceptDroppedProviders:" in app
-          assert app.count(".onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText]") >= 3
+          assert "RootDropInstaller" in app
+          assert "UIDropInteraction(delegate: self)" in app
+          assert "session.hasItemsConforming(toTypeIdentifiers:" in app
+          assert 'Text("松手打开链接")' in app
           assert "incomingLinkRevision = UUID()" in app
           assert "private func importDrop(" in app
           assert 'incomingLinkRevision: incomingLinkRevision' in app

@@ -195,3 +195,10 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 2.1.3 把拖放挂到 host window 的 `UIDropInteraction` 上，结果它抢走拖放却不投递，App 内拖放全部失效。这是回归，撤回。
 - 恢复 TabView 级 `.onDrop` 和浏览器页原有接收；设置页的 `Form`、下载页的 `List` 和根视图各自加 `.onDrop`，覆盖滚动区域。
 - 图标拖放的注册保持 2.1.4 不变。
+
+## 2.1.6 · 根视图拖放与全局落点提示
+
+- 2.1.5 在 `Form` / `List` 上直接加 `.onDrop` 仍收不到：这两个页面的滚动视图自己持有命中测试，SwiftUI 的拖放修饰器没有机会接管。
+- 改回 UIKit，但这次挂在 `window.rootViewController.view` 上。它是三个 tab 的共同祖先，下载页和设置页都在它下面；不是 2.1.3 那个无效的 UIWindow。
+- 拖拽进入任何页面时显示全屏「松手打开链接」提示，松手后走原有 `DroppedLinkReader` 和浏览器路由；失败仍弹窗并写入拖放诊断。
+- 2.1.4 的图标注册不变。

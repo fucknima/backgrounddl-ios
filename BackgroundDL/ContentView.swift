@@ -1,5 +1,6 @@
 import SwiftUI
 import QuickLook
+import UIKit
 import UniformTypeIdentifiers
 
 private enum MainTab: Hashable {
@@ -27,10 +28,10 @@ struct ContentView: View {
             }
                 .tabItem { Label("浏览器", systemImage: "safari") }
                 .tag(MainTab.browser)
-            NavigationStack { DownloadListView(acceptDroppedProviders: { importDrop($0) }) }
+            NavigationStack { DownloadListView() }
                 .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
                 .tag(MainTab.downloads)
-            NavigationStack { DownloadSettingsView(acceptDroppedProviders: { importDrop($0) }) }
+            NavigationStack { DownloadSettingsView() }
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(MainTab.settings)
         }
@@ -45,22 +46,40 @@ struct ContentView: View {
                 incomingRouter.note("SwiftUI 用户活动没有网页链接")
             }
         }
-        // Catches drops over the tab bar and any tab that has no deeper target.
-        // The settings form and the downloads list install their own drop
-        // modifiers because their scroll views sit below this one.
-        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: $isDropTargeted) { providers in
-            importDrop(providers)
-        }
-        .overlay(alignment: .center) {
+        // One interaction on the root view accepts a link from every tab. A
+        // SwiftUI drop modifier on the TabView, a List or a Form never sees
+        // the drag because their scroll views own the hit testing.
+        .background(
+            RootDropInstaller(accept: { importDrop($0) }, setTargeted: { isDropTargeted = $0 })
+                .frame(width: 1, height: 1)
+        )
+        .overlay {
             if isDropTargeted {
-                Label("松手打开链接", systemImage: "link")
-                    .font(.headline)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 16)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                    .allowsHitTesting(false)
+                ZStack {
+                    Color.black.opacity(0.22).ignoresSafeArea()
+                    VStack(spacing: 10) {
+                        Image(systemName: "link.badge.plus")
+                            .font(.system(size: 34, weight: .semibold))
+                        Text("松手打开链接")
+                            .font(.headline)
+                        Text("将在浏览器中打开")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 22)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .strokeBorder(.white.opacity(0.15))
+                    }
+                    .shadow(color: .black.opacity(0.25), radius: 24, y: 10)
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.15), value: isDropTargeted)
         .alert("无法打开链接", isPresented: $showLinkError) {
             Button("确定", role: .cancel) {}
         } message: { Text(linkError) }
@@ -114,6 +133,102 @@ struct ContentView: View {
     }
 }
 
+
+/// A drop target installed on the root controller view. It is an ancestor of
+/// every tab, so the settings form and the downloads list are covered without
+/// fighting their scroll views for the drag session.
+private struct RootDropInstaller: UIViewRepresentable {
+    let accept: ([NSItemProvider]) -> Bool
+    let setTargeted: (Bool) -> Void
+
+    func makeUIView(context: Context) -> RootDropInstallerView {
+        let view = RootDropInstallerView()
+        view.accept = accept
+        view.setTargeted = setTargeted
+        return view
+    }
+
+    func updateUIView(_ view: RootDropInstallerView, context: Context) {
+        view.accept = accept
+        view.setTargeted = setTargeted
+    }
+
+    static func dismantleUIView(_ view: RootDropInstallerView, coordinator: ()) {
+        view.uninstall()
+    }
+}
+
+private final class RootDropInstallerView: UIView, UIDropInteractionDelegate {
+    var accept: (([NSItemProvider]) -> Bool)?
+    var setTargeted: ((Bool) -> Void)?
+    private var interaction: UIDropInteraction?
+    private weak var hostView: UIView?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard let window else {
+            uninstall()
+            return
+        }
+        // The window itself is not a drop host; its root view is.
+        let host = window.rootViewController?.view ?? window
+        guard hostView !== host else { return }
+        uninstall()
+        let interaction = UIDropInteraction(delegate: self)
+        host.addInteraction(interaction)
+        self.interaction = interaction
+        hostView = host
+    }
+
+    func uninstall() {
+        if let interaction {
+            hostView?.removeInteraction(interaction)
+        }
+        interaction = nil
+        hostView = nil
+        setTargeted?(false)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, canHandle session: UIDropSession) -> Bool {
+        session.hasItemsConforming(toTypeIdentifiers: [
+            UTType.url.identifier,
+            UTType.fileURL.identifier,
+            UTType.plainText.identifier
+        ])
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidEnter session: UIDropSession) {
+        setTargeted?(true)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: UIDropSession) -> UIDropProposal {
+        UIDropProposal(operation: .copy)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidExit session: UIDropSession) {
+        setTargeted?(false)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidEnd session: UIDropSession) {
+        setTargeted?(false)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, performDrop session: UIDropSession) {
+        setTargeted?(false)
+        _ = accept?(session.items.map { $0.itemProvider })
+    }
+}
+
 private enum DownloadSort: String, CaseIterable {
     case newest = "最新优先"
     case oldest = "最早优先"
@@ -140,7 +255,6 @@ private struct DetailSelection: Identifiable {
 }
 
 private struct DownloadListView: View {
-    let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @ObservedObject private var store = DownloadStore.shared
     @State private var filter: DownloadFilter = .all
     @State private var selectedDetail: DetailSelection?
@@ -220,11 +334,9 @@ private struct DownloadListView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) { acceptDroppedProviders($0) }
             }
         }
         .background(Color(uiColor: .systemBackground))
-        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) { acceptDroppedProviders($0) }
         .navigationTitle("下载")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -664,7 +776,6 @@ private struct DownloadDetailView: View {
 }
 
 private struct DownloadSettingsView: View {
-    let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @ObservedObject private var store = DownloadStore.shared
     @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
     @AppStorage("bgdl.downloadMode") private var downloadMode = "smart"
@@ -734,7 +845,6 @@ private struct DownloadSettingsView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
-        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) { acceptDroppedProviders($0) }
         .navigationTitle("设置")
         .confirmationDialog("清除浏览历史？", isPresented: $showHistoryClear) {
             Button("清除历史", role: .destructive) { BrowserLibrary.shared.clearHistory() }
