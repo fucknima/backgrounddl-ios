@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var selectedTab: MainTab = .browser
     @StateObject private var browserState = BrowserState()
     @State private var keyboardVisible = false
+    @State private var browserBarHidden = false
     @State private var sharedURL: URL?
     @State private var incomingLinkRevision = UUID()
     @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
@@ -38,6 +39,11 @@ struct ContentView: View {
                                 sharedURL: sharedURL,
                                 openDownloads: { selectedTab = .downloads },
                                 openSettings: { selectedTab = .settings },
+                                onScrollHideChange: { hidden in
+                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) {
+                                        browserBarHidden = hidden
+                                    }
+                                },
                                 incomingLinkRevision: incomingLinkRevision,
                                 acceptDroppedProviders: { providers in importDrop(providers) })
                 }
@@ -55,8 +61,9 @@ struct ContentView: View {
             }
             .tint(.cyan)
             .toolbar(.hidden, for: .tabBar)
+            .ignoresSafeArea(.container, edges: .bottom)
 
-            if !keyboardVisible {
+            if !keyboardVisible && !browserBarHidden {
                 AppBottomBar(selectedTab: $selectedTab,
                              browser: browserState,
                              openDownloads: { selectedTab = .downloads })
@@ -127,6 +134,9 @@ struct ContentView: View {
                 acceptSharedLink()
                 consumePendingLink()
             }
+        }
+        .onChange(of: selectedTab) { _, _ in
+            withAnimation(.easeOut(duration: 0.2)) { browserBarHidden = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = true }

@@ -70,6 +70,7 @@ struct BrowserView: View {
     let sharedURL: URL?
     let openDownloads: () -> Void
     let openSettings: () -> Void
+    let onScrollHideChange: (Bool) -> Void
     let incomingLinkRevision: UUID
     let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @FocusState private var isEditingAddress: Bool
@@ -82,7 +83,7 @@ struct BrowserView: View {
             addressBar
             if !state.notice.isEmpty { noticeCard }
             ZStack {
-                BrowserWebView(state: state, appearanceMode: webAppearanceMode)
+                BrowserWebView(state: state, appearanceMode: webAppearanceMode, onScrollHideChange: onScrollHideChange)
                 if state.isHome {
                     BrowserStartPage(open: { url in
                         state.loadSharedURL(url)
@@ -262,6 +263,7 @@ struct BrowserView: View {
 private struct BrowserWebView: UIViewRepresentable {
     @ObservedObject var state: BrowserState
     let appearanceMode: String
+    let onScrollHideChange: (Bool) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
     // Inject at document start so sites with white backgrounds do not first paint an
@@ -371,7 +373,8 @@ private struct BrowserWebView: UIViewRepresentable {
     """#
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(state: state, appearanceMode: appearanceMode, systemDark: colorScheme == .dark)
+        Coordinator(state: state, appearanceMode: appearanceMode,
+                    systemDark: colorScheme == .dark, onScrollHideChange: onScrollHideChange)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -394,6 +397,7 @@ private struct BrowserWebView: UIViewRepresentable {
         browser.backgroundColor = .systemBackground
         browser.underPageBackgroundColor = .systemBackground
         state.webView = browser
+        context.coordinator.observe(browser.scrollView)
         if let url = state.loadURL { browser.load(URLRequest(url: url)) }
         return browser
     }
@@ -403,6 +407,7 @@ private struct BrowserWebView: UIViewRepresentable {
         browser.underPageBackgroundColor = .systemBackground
         context.coordinator.appearanceMode = appearanceMode
         context.coordinator.systemDark = colorScheme == .dark
+        context.coordinator.onScrollHideChange = onScrollHideChange
         context.coordinator.syncPageTheme(webView: browser)
     }
 
@@ -411,12 +416,42 @@ private struct BrowserWebView: UIViewRepresentable {
         private let state: BrowserState
         var appearanceMode: String
         var systemDark: Bool
+        var onScrollHideChange: (Bool) -> Void
         private var lastAppearance = ""
+        private var scrollObservation: NSKeyValueObservation?
+        private var lastOffsetY: CGFloat = 0
+        private var lastHidden = false
 
-        init(state: BrowserState, appearanceMode: String, systemDark: Bool) {
+        init(state: BrowserState, appearanceMode: String, systemDark: Bool,
+             onScrollHideChange: @escaping (Bool) -> Void) {
             self.state = state
             self.appearanceMode = appearanceMode
             self.systemDark = systemDark
+            self.onScrollHideChange = onScrollHideChange
+        }
+
+        func observe(_ scrollView: UIScrollView) {
+            scrollObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
+                let y = scroll.contentOffset.y
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    let delta = y - self.lastOffsetY
+                    self.lastOffsetY = y
+                    let shouldHide: Bool
+                    if y <= 6 {
+                        shouldHide = false
+                    } else if delta > 4 {
+                        shouldHide = true
+                    } else if delta < -4 {
+                        shouldHide = false
+                    } else {
+                        return
+                    }
+                    guard shouldHide != self.lastHidden else { return }
+                    self.lastHidden = shouldHide
+                    self.onScrollHideChange(shouldHide)
+                }
+            }
         }
 
         func syncPageTheme(webView: WKWebView, force: Bool = false) {
