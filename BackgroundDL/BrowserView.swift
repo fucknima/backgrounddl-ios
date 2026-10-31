@@ -734,31 +734,80 @@ private struct BrowserHistoryView: View {
     @State private var search = ""
     @State private var confirmingClear = false
     let open: (URL) -> Void
+
+    private struct SectionGroup: Identifiable {
+        let id: String
+        let entries: [BrowserEntry]
+    }
+
     private var results: [BrowserEntry] {
         library.history.filter {
             search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) ||
                 $0.url.localizedCaseInsensitiveContains(search)
         }
     }
+
+    private var sections: [SectionGroup] {
+        var today: [BrowserEntry] = []
+        var yesterday: [BrowserEntry] = []
+        var earlier: [BrowserEntry] = []
+        for entry in results {
+            if Calendar.current.isDateInToday(entry.visited) { today.append(entry) }
+            else if Calendar.current.isDateInYesterday(entry.visited) { yesterday.append(entry) }
+            else { earlier.append(entry) }
+        }
+        return [
+            SectionGroup(id: "今天", entries: today),
+            SectionGroup(id: "昨天", entries: yesterday),
+            SectionGroup(id: "更早", entries: earlier)
+        ].filter { !$0.entries.isEmpty }
+    }
+
     var body: some View {
         List {
-            ForEach(results) { entry in
-                Button {
-                    if let url = URL(string: entry.url) { open(url) }
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(entry.title).font(.subheadline).lineLimit(1)
-                        Text(URL(string: entry.url)?.host ?? entry.url)
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .contextMenu {
-                    Button("移除这条历史", systemImage: "trash") {
-                        library.deleteHistory(entry.url)
+            ForEach(sections) { section in
+                Section(section.id) {
+                    ForEach(section.entries) { entry in
+                        Button {
+                            if let url = URL(string: entry.url) { open(url) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(initial(entry))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(AppTheme.accent)
+                                    .frame(width: 34, height: 34)
+                                    .background(AppTheme.accent.opacity(0.12), in: Circle())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(title(entry))
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                    Text("\(host(entry)) · \(time(entry))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                library.deleteHistory(entry.url)
+                            } label: {
+                                Label("删除", systemImage: "trash")
+                            }
+                        }
+                        .contextMenu {
+                            Button("移除这条历史", systemImage: "trash") {
+                                library.deleteHistory(entry.url)
+                            }
+                        }
                     }
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("浏览历史")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, prompt: "查找历史记录")
@@ -773,6 +822,24 @@ private struct BrowserHistoryView: View {
         }
         .confirmationDialog("清除全部历史？", isPresented: $confirmingClear) {
             Button("清除历史", role: .destructive) { library.clearHistory() }
-        } message: { Text("不会删除 Cookie、收藏或下载文件。") }
+        } message: {
+            Text("不会删除 Cookie、收藏或下载文件。")
+        }
+    }
+
+    private func host(_ entry: BrowserEntry) -> String {
+        URL(string: entry.url)?.host ?? entry.url
+    }
+
+    private func title(_ entry: BrowserEntry) -> String {
+        entry.title.isEmpty ? host(entry) : entry.title
+    }
+
+    private func initial(_ entry: BrowserEntry) -> String {
+        String(host(entry).replacingOccurrences(of: "www.", with: "").prefix(1)).uppercased()
+    }
+
+    private func time(_ entry: BrowserEntry) -> String {
+        entry.visited.formatted(date: .omitted, time: .shortened)
     }
 }

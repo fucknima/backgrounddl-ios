@@ -3,6 +3,15 @@ import QuickLook
 import UIKit
 import UniformTypeIdentifiers
 
+enum AppTheme {
+    static let accent = Color.cyan
+    static let pageBackground = AppTheme.pageBackground
+    static let card = AppTheme.card
+    static let border = Color.primary.opacity(0.06)
+    static let pagePadding: CGFloat = 18
+    static let cardRadius: CGFloat = 20
+}
+
 private enum MainTab: Hashable {
     case browser, downloads, settings
 }
@@ -259,7 +268,6 @@ private struct DownloadListView: View {
     @State private var filter: DownloadFilter = .all
     @State private var selectedDetail: DetailSelection?
     @State private var showClearCompleted = false
-
     @State private var showDirectInput = false
     @State private var link = ""
     @State private var searchText = ""
@@ -282,65 +290,26 @@ private struct DownloadListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 12) {
-                HStack(alignment: .center, spacing: 6) {
-                    Label("\(store.runningCount) 下载中", systemImage: "arrow.down.circle")
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: 6)
-                    Label(store.aggregateSpeedLabel, systemImage: "speedometer")
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 6)
-                    Text("\(store.completedCount) 已完成")
-                        .foregroundStyle(.secondary)
-                }
-                .font(.caption.weight(.medium))
-                .monospacedDigit()
-                Picker("状态", selection: $filter) {
-                    ForEach(DownloadFilter.allCases) { choice in
-                        Text(choice.rawValue).tag(choice)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("downloadFilter")
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .padding(.bottom, 12)
-            .background(Color(uiColor: .secondarySystemBackground))
-
+            statsHeader
             if visibleItems.isEmpty {
-                Spacer(minLength: 20)
-                ContentUnavailableView(
-                    searchText.isEmpty ? (filter == .all ? "暂无下载" : "没有相关任务") : "没有匹配的下载",
-                    systemImage: searchText.isEmpty ? "arrow.down.doc" : "magnifyingglass",
-                    description: Text(searchText.isEmpty ? "打开分享链接或添加 HTTPS 直链即可开始下载。" : "试试其他文件名。")
-                )
-                .frame(maxWidth: .infinity)
-                Spacer()
+                emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(visibleItems) { item in
-                            CompactDownloadRow(item: item,
-                                               fileURL: store.fileURL(for: item),
-                                               pause: { DownloadCoordinator.shared.changeState(id: item.id, action: .pause) },
-                                               resume: { DownloadCoordinator.shared.changeState(id: item.id, action: .resume) },
-                                               cancel: { DownloadCoordinator.shared.changeState(id: item.id, action: .cancel) },
-                                               retry: { retry(item) },
-                                               remove: { deleteFile in deleteImmediately(id: item.id, deleteFile: deleteFile) },
-                                               openDetails: { selectedDetail = DetailSelection(id: item.id) },
-                                               rename: { name in try store.renameCompleted(id: item.id, to: name) })
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 4)
-                            Divider()
-                                .padding(.leading, 18)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
+                NativeDownloadList(
+                    items: visibleItems,
+                    pause: { DownloadCoordinator.shared.changeState(id: $0, action: .pause) },
+                    resume: { DownloadCoordinator.shared.changeState(id: $0, action: .resume) },
+                    cancel: { DownloadCoordinator.shared.changeState(id: $0, action: .cancel) },
+                    retry: { id in
+                        guard let item = store.items.first(where: { $0.id == id }) else { return }
+                        retry(item)
+                    },
+                    remove: { id, deleteFile in deleteImmediately(id: id, deleteFile: deleteFile) },
+                    openDetails: { selectedDetail = DetailSelection(id: $0) },
+                    rename: { id, name in try store.renameCompleted(id: id, to: name) }
+                )
             }
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(AppTheme.pageBackground)
         .navigationTitle("下载")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -401,6 +370,84 @@ private struct DownloadListView: View {
         .searchable(text: $searchText, prompt: "搜索下载文件")
     }
 
+    private var statsHeader: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 8) {
+                statPill("进行中", "\(store.runningCount)", icon: "arrow.down", tint: AppTheme.accent)
+                statPill("已完成", "\(store.completedCount)", icon: "checkmark", tint: .green)
+                statPill("总速度", store.aggregateSpeedLabel == "--" ? "—" : store.aggregateSpeedLabel,
+                         icon: "speedometer", tint: .orange)
+            }
+            Picker("状态", selection: $filter) {
+                ForEach(DownloadFilter.allCases) { choice in
+                    Text(choice.rawValue).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("downloadFilter")
+        }
+        .padding(14)
+        .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(AppTheme.border)
+        }
+        .padding(.horizontal, AppTheme.pagePadding)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+    }
+
+    private func statPill(_ title: String, _ value: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "arrow.down.circle")
+                .font(.system(size: 46, weight: .thin))
+                .foregroundStyle(AppTheme.accent)
+            Text(searchText.isEmpty ? (filter == .all ? "暂无下载" : "没有相关任务") : "没有匹配的下载")
+                .font(.headline)
+            Text(searchText.isEmpty ? "从浏览器打开链接，或拖入一个 HTTPS 直链。" : "试试其他文件名。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button {
+                showDirectInput = true
+            } label: {
+                Label("添加直链", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 11)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(AppTheme.accent)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+    }
+
     @MainActor private func startDirectDownload() {
         let raw = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: raw), url.scheme?.lowercased() == "https", url.host != nil else {
@@ -427,8 +474,6 @@ private struct DownloadListView: View {
     }
 
     @MainActor private func deleteImmediately(id: UUID, deleteFile: Bool) {
-        // No confirmation: wait until the swipe action has dismissed, then remove
-        // by stable UUID; if deleting the actual file fails, retain its record.
         DispatchQueue.main.async {
             guard store.items.contains(where: { $0.id == id }) else { return }
             do { try DownloadCoordinator.shared.remove(id: id, deleteFile: deleteFile) }
@@ -440,6 +485,114 @@ private struct DownloadListView: View {
         do { try store.clearCompleted(deleteFiles: deleteFiles) } catch { show(error) }
     }
     private func show(_ error: Error) { alertMessage = error.localizedDescription; showAlert = true }
+}
+
+private struct NativeDownloadList: UIViewControllerRepresentable {
+    let items: [DownloadItem]
+    let pause: (UUID) -> Void
+    let resume: (UUID) -> Void
+    let cancel: (UUID) -> Void
+    let retry: (UUID) -> Void
+    let remove: (UUID, Bool) -> Void
+    let openDetails: (UUID) -> Void
+    let rename: (UUID, String) throws -> Void
+
+    func makeUIViewController(context: Context) -> DownloadTableController {
+        let controller = DownloadTableController()
+        apply(to: controller)
+        return controller
+    }
+
+    func updateUIViewController(_ controller: DownloadTableController, context: Context) {
+        apply(to: controller)
+    }
+
+    private func apply(to controller: DownloadTableController) {
+        controller.pause = pause
+        controller.resume = resume
+        controller.cancel = cancel
+        controller.retry = retry
+        controller.remove = remove
+        controller.openDetails = openDetails
+        controller.rename = rename
+        controller.apply(items: items)
+    }
+}
+
+private final class DownloadTableController: UITableViewController {
+    var pause: (UUID) -> Void = { _ in }
+    var resume: (UUID) -> Void = { _ in }
+    var cancel: (UUID) -> Void = { _ in }
+    var retry: (UUID) -> Void = { _ in }
+    var remove: (UUID, Bool) -> Void = { _, _ in }
+    var openDetails: (UUID) -> Void = { _ in }
+    var rename: (UUID, String) throws -> Void = { _, _ in }
+
+    private var items: [DownloadItem] = []
+    private var lastIDs: [UUID] = []
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "row")
+        tableView.separatorStyle = .none
+        tableView.backgroundColor = .clear
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 120
+        tableView.contentInset = UIEdgeInsets(top: 4, left: 0, bottom: 28, right: 0)
+        tableView.showsVerticalScrollIndicator = false
+    }
+
+    func apply(items newItems: [DownloadItem]) {
+        items = newItems
+        let ids = newItems.map(\.id)
+        guard ids != lastIDs else { return }
+        lastIDs = ids
+        tableView.reloadData()
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        items.count
+    }
+
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "row", for: indexPath)
+        cell.backgroundColor = .clear
+        cell.contentView.backgroundColor = .clear
+        cell.selectionStyle = .none
+        let id = items[indexPath.row].id
+        let pause = self.pause, resume = self.resume, cancel = self.cancel
+        let retry = self.retry, remove = self.remove, openDetails = self.openDetails
+        let rename = self.rename
+        cell.contentConfiguration = UIHostingConfiguration {
+            LiveDownloadRow(id: id,
+                            pause: pause,
+                            resume: resume,
+                            cancel: cancel,
+                            retry: retry,
+                            remove: remove,
+                            openDetails: openDetails,
+                            rename: rename)
+                .padding(.horizontal, AppTheme.pagePadding)
+                .padding(.vertical, 5)
+        }
+        .margins(.all, 0)
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        let item = items[indexPath.row]
+        let action = UIContextualAction(style: .destructive,
+                                        title: item.status == .completed ? "删除" : "移除") { [weak self] _, _, completion in
+            guard let self else { completion(false); return }
+            self.remove(item.id, item.status == .completed)
+            completion(true)
+        }
+        action.image = UIImage(systemName: "trash")
+        let configuration = UISwipeActionsConfiguration(actions: [action])
+        configuration.performsFirstActionWithFullSwipe = true
+        return configuration
+    }
 }
 
 private struct CompactDownloadRow: View {
@@ -460,29 +613,29 @@ private struct CompactDownloadRow: View {
     @State private var previewURL: URL?
 
     var body: some View {
-        HStack(alignment: .center, spacing: 11) {
-            Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "doc.zipper")
-                .font(.title2)
-                .foregroundStyle(item.status == .completed ? .green : .cyan)
-                .frame(width: 29)
-            VStack(alignment: .leading, spacing: 5) {
+        HStack(alignment: .center, spacing: 13) {
+            statusBadge
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(item.filename)
                         .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 2)
-                    if let progress = item.fraction, item.status == .running || item.status == .paused {
-                        Text("\(Int(progress * 100))%")
-                            .font(.caption.monospacedDigit().weight(.semibold))
+                        .lineLimit(2)
+                    Spacer(minLength: 6)
+                    if item.status == .running || item.status == .paused {
+                        Text(progressText)
+                            .font(.caption.weight(.semibold).monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
                 }
+                Text(secondaryLine)
+                    .font(.caption)
+                    .foregroundStyle(item.status == .failed ? .red : .secondary)
+                    .lineLimit(1)
                 if item.status == .running || item.status == .paused {
                     ProgressView(value: item.fraction ?? 0)
-                        .tint(.cyan)
+                        .tint(AppTheme.accent)
                         .frame(height: 4)
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         Text("\(item.downloadedBytes.readableSize) / \(item.totalBytes.readableSize)")
                         Spacer(minLength: 4)
                         Text(item.status == .paused ? "已暂停" : item.speedLabel)
@@ -493,31 +646,8 @@ private struct CompactDownloadRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                } else {
-                    if item.status == .completed {
-                        HStack(spacing: 6) {
-                            Text("已完成 · \(item.downloadedBytes.readableSize)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer(minLength: 4)
-                            Text(item.completedAt.map {
-                                $0.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())
-                            } ?? "时间未知")
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.tertiary)
-                        }
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    } else {
-                        Text(item.errorMessage ?? stateText)
-                            .font(.caption)
-                            .foregroundStyle(item.status == .failed ? .red : .secondary)
-                            .lineLimit(1)
-                    }
                 }
             }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: openDetails)
             Menu {
                 Button { openDetails() } label: { Label("任务详情", systemImage: "info.circle") }
                 if item.status == .running { Button("暂停", systemImage: "pause.fill", action: pause) }
@@ -543,14 +673,21 @@ private struct CompactDownloadRow: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.body.weight(.medium))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 40)
+                    .frame(width: 30, height: 40)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("管理 \(item.filename)")
         }
-        .padding(.vertical, 5)
+        .padding(14)
+        .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(AppTheme.border)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onTapGesture(perform: openDetails)
         .contextMenu {
             if item.status == .running { Button("暂停", action: pause) }
             if item.status == .paused { Button("继续", action: resume) }
@@ -571,16 +708,88 @@ private struct CompactDownloadRow: View {
         .alert("操作失败", isPresented: $showError) { Button("确定", role: .cancel) {} } message: { Text(errorText) }
     }
 
-    private var stateText: String {
+    private var progressText: String {
+        guard let fraction = item.fraction else { return "" }
+        return "\(Int(fraction * 100))%"
+    }
+
+    private var secondaryLine: String {
+        let host = URL(string: item.originalURL)?.host ?? item.sourceLabel
         switch item.status {
-        case .running: return "下载中"
-        case .paused: return "已暂停"
-        case .completed: return "已完成"
-        case .failed: return "下载失败"
-        case .cancelled: return "已取消"
+        case .running:
+            return host
+        case .paused:
+            return "已暂停 · \(host)"
+        case .completed:
+            let date = item.completedAt.map {
+                $0.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())
+            } ?? "时间未知"
+            return "已完成 · \(item.downloadedBytes.readableSize) · \(date)"
+        case .failed:
+            return item.errorMessage ?? "下载失败"
+        case .cancelled:
+            return "已取消 · \(host)"
         }
     }
+
+    private var statusBadge: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(statusTint.opacity(0.14))
+                .frame(width: 44, height: 44)
+            Image(systemName: statusSymbol)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(statusTint)
+        }
+    }
+
+    private var statusTint: Color {
+        switch item.status {
+        case .running: return AppTheme.accent
+        case .paused: return .orange
+        case .completed: return .green
+        case .failed: return .red
+        case .cancelled: return .secondary
+        }
+    }
+
+    private var statusSymbol: String {
+        switch item.status {
+        case .running: return "arrow.down"
+        case .paused: return "pause.fill"
+        case .completed: return "checkmark"
+        case .failed: return "exclamationmark"
+        case .cancelled: return "xmark"
+        }
+    }
+
     private func report(_ error: Error) { errorText = error.localizedDescription; showError = true }
+}
+
+private struct LiveDownloadRow: View {
+    @ObservedObject private var store = DownloadStore.shared
+    let id: UUID
+    let pause: (UUID) -> Void
+    let resume: (UUID) -> Void
+    let cancel: (UUID) -> Void
+    let retry: (UUID) -> Void
+    let remove: (UUID, Bool) -> Void
+    let openDetails: (UUID) -> Void
+    let rename: (UUID, String) throws -> Void
+
+    var body: some View {
+        if let item = store.items.first(where: { $0.id == id }) {
+            CompactDownloadRow(item: item,
+                               fileURL: store.fileURL(for: item),
+                               pause: { pause(id) },
+                               resume: { resume(id) },
+                               cancel: { cancel(id) },
+                               retry: { retry(id) },
+                               remove: { deleteFile in remove(id, deleteFile) },
+                               openDetails: { openDetails(id) },
+                               rename: { name in try rename(id, name) })
+        }
+    }
 }
 
 // A task is inspected by immutable UUID; every statistic is resolved from the live
@@ -771,7 +980,6 @@ private struct DownloadDetailView: View {
 
 private struct DownloadSettingsView: View {
     @ObservedObject private var store = DownloadStore.shared
-    @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
     @AppStorage("bgdl.downloadMode") private var downloadMode = "smart"
     @AppStorage("bgdl.notifyDownloads") private var notifyDownloads = false
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
@@ -809,7 +1017,7 @@ private struct DownloadSettingsView: View {
                     }
                 }
                 .padding(16)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                 settingsCard("下载引擎") {
                     HStack {
@@ -854,25 +1062,7 @@ private struct DownloadSettingsView: View {
                     footnote("清除历史不会清理浏览器 Cookie 或取消正在进行的下载。")
                 }
 
-                settingsCard("拖放诊断") {
-                    footnote("拖到主屏幕图标后若 App 打开但网页没有打开，请复制下方记录。记录只包含事件类型和网站域名，不包含完整 URL 或授权参数。")
-                    ForEach(Array(incomingRouter.events.prefix(10).enumerated()), id: \.offset) { _, event in
-                        Text(event)
-                            .font(.caption2.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    HStack {
-                        Button("复制诊断") {
-                            UIPasteboard.general.string = incomingRouter.events.joined(separator: "\n")
-                        }
-                        Spacer()
-                        Button("清空") { incomingRouter.clear() }
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                settingsCard("隐私与诊断") {
+                settingsCard("隐私") {
                     footnote("任务详情支持分享脱敏诊断报告，不包含完整签名链接、密码或 Cookie。")
                     footnote("下载文件仅保存在本机的「文件 → 在我的 iPhone 上 → 后台下载 → Downloads」。")
                 }
@@ -880,7 +1070,7 @@ private struct DownloadSettingsView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(AppTheme.pageBackground)
         .navigationTitle("设置")
         .confirmationDialog("清除浏览历史？", isPresented: $showHistoryClear) {
             Button("清除历史", role: .destructive) { BrowserLibrary.shared.clearHistory() }
@@ -917,7 +1107,7 @@ private struct DownloadSettingsView: View {
             VStack(alignment: .leading, spacing: 14) { content() }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(AppTheme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 }
