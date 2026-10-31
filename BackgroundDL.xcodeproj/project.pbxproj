@@ -24,6 +24,7 @@
         };
 /* End PBXCopyFilesBuildPhase section */
 /* Begin PBXBuildFile section */
+        D30100000000000000000001 /* DroppedLinkReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30100000000000000000002 /* DroppedLinkReader.swift */; };
         69E71F8DE03362F5A5CEC3FA /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */; };
         5EE70396164BFBE5417B1964 /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */; };
         FBCDB3A3AE29906F4880884B /* DownloadLiveWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F933A911D2BFAE2D3FF3C18 /* DownloadLiveWidget.swift */; };
@@ -47,6 +48,7 @@
         F91000000000000000000006 /* DownloadRetryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90000000000000000000006 /* DownloadRetryManager.swift */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
+        D30100000000000000000002 /* DroppedLinkReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DroppedLinkReader.swift; sourceTree = "<group>"; };
         C992D2F251636527C99067A4 /* DownloadActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadActivityAttributes.swift; sourceTree = "<group>"; };
         2A0A7F8B7826CCE21CD2F00D /* DownloadActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadActivityManager.swift; sourceTree = "<group>"; };
         7F933A911D2BFAE2D3FF3C18 /* DownloadLiveWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadLiveWidget.swift; sourceTree = "<group>"; };
@@ -100,6 +102,7 @@
             children = (
                 00FF60B69356E8DADF82387E /* BackgroundDLApp.swift */,
                 48E0F96C682DC1558B12A4D3 /* ContentView.swift */,
+                D30100000000000000000002 /* DroppedLinkReader.swift */,
                 4F70A7C1B9004C13B6181991 /* BrowserView.swift */,
                 E50100000000000000000011 /* SharedLinkInbox.swift */,
                 E50100000000000000000013 /* BackgroundDL.entitlements */,
@@ -207,6 +210,7 @@
             files = (
                 D9E8D39A12BC275A2BF7EEDE /* BackgroundDLApp.swift in Sources */,
                 82FDB5029E6F8623BBAF7240 /* ContentView.swift in Sources */,
+                D30100000000000000000001 /* DroppedLinkReader.swift in Sources */,
                 4F70A7C1B9004C13B6181990 /* BrowserView.swift in Sources */,
                 E50100000000000000000012 /* SharedLinkInbox.swift in Sources */,
                 7FCA99F642FA2B3B5E5281AC /* Models.swift in Sources */,

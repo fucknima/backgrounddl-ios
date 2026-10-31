@@ -99,42 +99,17 @@ struct ContentView: View {
     private func importDrop(_ providers: [NSItemProvider]) -> Bool {
         let typeNames = providers.flatMap { $0.registeredTypeIdentifiers }.joined(separator: ",")
         incomingRouter.note("onDrop 收到 \(providers.count) 项：\(String(typeNames.prefix(110)))")
-        guard let provider = providers.first(where: {
-            $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) ||
-            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ||
-            $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier)
-        }) else {
-            incomingRouter.note("没有支持的拖放类型")
-            return false
-        }
-        let type = provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
-            ? UTType.url.identifier
-            : provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
-                ? UTType.fileURL.identifier : UTType.plainText.identifier
-
-        // Begin loading before the drop handler returns, as required for item providers.
-        provider.loadItem(forTypeIdentifier: type, options: nil) { item, error in
-            let resolved: URL?
-            if let url = item as? URL {
-                resolved = IncomingLinkDecoder.resolve(url)
-            } else if let raw = item as? String {
-                resolved = IncomingLinkDecoder.extract(raw)
-            } else if let data = item as? Data {
-                resolved = IncomingLinkDecoder.resolvePayload(data)
+        return DroppedLinkReader.load(providers: providers, note: { event in
+            incomingRouter.note(event)
+        }, completion: { resolved in
+            if let resolved {
+                incomingRouter.receive(resolved, from: "App 内 onDrop")
             } else {
-                resolved = nil
+                incomingRouter.note("拖放全部读取方式均失败")
+                linkError = "未能提取有效网址，请到「设置 → 拖放诊断」查看各读取方式的结果。"
+                showLinkError = true
             }
-            Task { @MainActor in
-                if let resolved {
-                    incomingRouter.receive(resolved, from: "App 内 onDrop")
-                } else {
-                    incomingRouter.note(error == nil ? "拖放内容未解析：无匹配数据" : "拖放内容未解析：载入错误")
-                    linkError = "这次拖放未收到有效的网址。请到「设置 → 拖放诊断」查看记录。"
-                    showLinkError = true
-                }
-            }
-        }
-        return true
+        })
     }
 }
 

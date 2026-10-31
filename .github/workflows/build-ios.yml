@@ -142,6 +142,22 @@ jobs:
           assert "IncomingLinkRouter.shared.receive(context.url" in src
           print("PASS: Scene cold and warm URL entry points")
           PY
+      - name: Verify real NSItemProvider URL and plain-text decoding
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library BackgroundDL/DroppedLinkReader.swift Tests/DropLinkTests.swift -o /tmp/bgdl-drop-tests
+          /tmp/bgdl-drop-tests
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("BackgroundDL/ContentView.swift").read_text()
+          assert "DroppedLinkReader.load(providers: providers" in source
+          assert 'provider.loadItem(forTypeIdentifier: type' not in source
+          reader = Path("BackgroundDL/DroppedLinkReader.swift").read_text()
+          assert "provider.loadObject(ofClass: URL.self)" in reader
+          assert "UTType.utf8PlainText.identifier" in reader
+          assert "provider.loadDataRepresentation" in reader
+          print("PASS: app uses tested multi-representation reader")
+          PY
       - name: Build without code signing
         shell: bash
         run: |

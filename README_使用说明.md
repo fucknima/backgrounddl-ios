@@ -149,3 +149,12 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 分别处理 `scene(_:willConnectTo:options:)` 的冷启动 URL/用户活动、`scene(_:openURLContexts:)` 的运行中 URL 和 `scene(_:continue:)` 的网页用户活动。共用 2.0.7 的安全链接解析与跳转路由。
 - 「设置 → 拖放诊断」记录“场景配置请求”“Scene 冷启动”的 URL/用户活动数量；若均为 0，意味着这些公开入口没有收到可用于跳转的链接，不能假装已实现 Safari 专有图标释放交互。
 - 保留 App 内 onDrop、系统分享扩展及原下载功能。苹果的拖放框架主要面向 App 内实际放置区域，绿色＋本身不能证明系统已向第三方 App 发送 URL。
+
+## 2.0.9 · 修复 public.url + public.utf8-plain-text 拖入后未打开
+
+- 根据真机日志确认 `onDrop` 已获得 `public.url` 与 `public.utf8-plain-text`，旧版只读取第一种表示，解析失败便直接结束。
+- 引入 DroppedLinkReader：在 `onDrop` 回调返回前同时启动 URL 对象、字符串对象、`public.url` 数据、`public.utf8-plain-text` 数据以及原始 URL 对象读取，任意一种成功即交给现有浏览器路由。
+- 新增 DroppedLinkCodec，支持 UTF-8/UTF-16 网页链接、带说明文字的链接、.url 文本文件、XML/二进制 .webloc、NSKeyedArchiver NSURL 等实际表示，拒绝非 HTTP(S) 与过大数据。
+- 诊断记录明确区分每一种读取方式，**只显示表示名称、数据大小和网站域名，不记录完整签名 URL**。
+- 新增 macOS Foundation `NSItemProvider` 真正对象/数据模拟测试（NSURL、NSString、public.url 数据、无效 public.url + 有效文本回退），此项必须先通过，才会运行 iOS Release 构建。
+- 仍需用户的 iPhone 真机将链接拖入页面验证：自动测试不能模拟 Safari 原生网页的全部数据提供方式，也不能证明主屏幕图标直接松手会将链接交给第三方 App。
