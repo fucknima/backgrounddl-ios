@@ -307,6 +307,7 @@ private struct DownloadListView: View {
                     openDetails: { selectedDetail = DetailSelection(id: $0) },
                     rename: { id, name in try store.renameCompleted(id: id, to: name) }
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(AppTheme.pageBackground)
@@ -535,6 +536,7 @@ private final class DownloadTableController: UITableViewController {
         super.viewDidLoad()
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "row")
         tableView.separatorStyle = .none
+        tableView.contentInsetAdjustmentBehavior = .never
         tableView.backgroundColor = .clear
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 120

@@ -19,7 +19,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>2.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>34</string>
+	<string>35</string>
 	<!-- Via 1.9.0, signed with the same certificate, has no document types:
          web URLs are handled as URL schemes with the Editor role. -->
 	<key>CFBundleURLTypes</key>
