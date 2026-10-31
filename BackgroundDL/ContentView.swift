@@ -318,22 +318,26 @@ private struct DownloadListView: View {
                 .frame(maxWidth: .infinity)
                 Spacer()
             } else {
-                List {
-                    ForEach(visibleItems) { item in
-                        CompactDownloadRow(item: item,
-                                           fileURL: store.fileURL(for: item),
-                                           pause: { DownloadCoordinator.shared.changeState(id: item.id, action: .pause) },
-                                           resume: { DownloadCoordinator.shared.changeState(id: item.id, action: .resume) },
-                                           cancel: { DownloadCoordinator.shared.changeState(id: item.id, action: .cancel) },
-                                           retry: { retry(item) },
-                                           remove: { deleteFile in deleteImmediately(id: item.id, deleteFile: deleteFile) },
-                                           openDetails: { selectedDetail = DetailSelection(id: item.id) },
-                                           rename: { name in try store.renameCompleted(id: item.id, to: name) })
-                        .listRowInsets(EdgeInsets(top: 7, leading: 18, bottom: 7, trailing: 18))
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(visibleItems) { item in
+                            CompactDownloadRow(item: item,
+                                               fileURL: store.fileURL(for: item),
+                                               pause: { DownloadCoordinator.shared.changeState(id: item.id, action: .pause) },
+                                               resume: { DownloadCoordinator.shared.changeState(id: item.id, action: .resume) },
+                                               cancel: { DownloadCoordinator.shared.changeState(id: item.id, action: .cancel) },
+                                               retry: { retry(item) },
+                                               remove: { deleteFile in deleteImmediately(id: item.id, deleteFile: deleteFile) },
+                                               openDetails: { selectedDetail = DetailSelection(id: item.id) },
+                                               rename: { name in try store.renameCompleted(id: item.id, to: name) })
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 4)
+                            Divider()
+                                .padding(.leading, 18)
+                        }
                     }
+                    .padding(.vertical, 6)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
         }
         .background(Color(uiColor: .systemBackground))
@@ -557,16 +561,6 @@ private struct CompactDownloadRow: View {
             if item.status == .completed {
                 Button("删除本地文件与记录") { remove(true) }
             }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            // A single tap deletes immediately; keeping full swipe disabled avoids
-            // accidentally deleting the local file with an uncontrolled gesture.
-            Button { remove(item.status == .completed) } label: {
-                Label(item.status == .completed ? "删除" : "移除", systemImage: "trash")
-            }
-            .tint(.red)
-            if item.status == .running { Button("暂停", action: pause).tint(.orange) }
-            if item.status == .paused { Button("继续", action: resume).tint(.cyan) }
         }
         .alert("重命名文件", isPresented: $showRename) {
             TextField("文件名", text: $newName)
@@ -792,62 +786,138 @@ private struct DownloadSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Label("BackgroundDL 2.0", systemImage: "arrow.down.circle.fill")
-                    .font(.headline)
-                LabeledContent("已保存文件总大小", value: localStorageBytes.readableSize)
-                LabeledContent("已完成任务", value: "\(store.completedCount)")
-                LabeledContent("正在下载", value: "\(store.runningCount)")
-            }
-            Section("下载引擎") {
-                Picker("下载模式", selection: $downloadMode) {
-                    ForEach(DownloadMode.allCases) { mode in
-                        Text(mode.label).tag(mode.rawValue)
+        ScrollView {
+            VStack(spacing: 22) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.cyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("后台下载").font(.headline)
+                            Text("版本 \(appVersion)").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    Divider()
+                    HStack(spacing: 0) {
+                        statCell("已保存", localStorageBytes.readableSize)
+                        Divider().frame(height: 36)
+                        statCell("已完成", "\(store.completedCount)")
+                        Divider().frame(height: 36)
+                        statCell("下载中", "\(store.runningCount)")
                     }
                 }
-                Toggle("下载完成和失败通知", isOn: $notifyDownloads)
-                    .onChange(of: notifyDownloads) { _, enabled in
-                        if enabled { DownloadNotifications.requestPermission() }
+                .padding(16)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                settingsCard("下载引擎") {
+                    HStack {
+                        Text("下载模式")
+                        Spacer(minLength: 8)
+                        Picker("下载模式", selection: $downloadMode) {
+                            ForEach(DownloadMode.allCases) { mode in
+                                Text(mode.label).tag(mode.rawValue)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .tint(.cyan)
                     }
-                Text("智能/极速模式仅对支持 Range 的 HTTPS 直链尝试多连接。后台传输仍由 iOS 调度，不能保证持续满速。")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("浏览器") {
-                Picker("网页外观", selection: $webAppearanceMode) {
-                    Text("智能深色").tag("auto")
-                    Text("始终深色").tag("always")
-                    Text("网站原样").tag("off")
+                    Toggle("下载完成和失败通知", isOn: $notifyDownloads)
+                        .tint(.cyan)
+                        .onChange(of: notifyDownloads) { _, enabled in
+                            if enabled { DownloadNotifications.requestPermission() }
+                        }
+                    footnote("智能/极速模式仅对支持 Range 的 HTTPS 直链尝试多连接。后台传输仍由 iOS 调度，不能保证持续满速。")
                 }
-                Button("清除浏览历史", role: .destructive) { showHistoryClear = true }
-                Text("清除历史不会清理浏览器 Cookie 或取消正在进行的下载。")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("拖放诊断") {
-                Text("拖到主屏幕图标后若 App 打开但网页没有打开，请复制下方记录。记录只包含事件类型和网站域名，不包含完整 URL 或授权参数。")
-                    .font(.footnote).foregroundStyle(.secondary)
-                ForEach(Array(incomingRouter.events.prefix(10).enumerated()), id: \.offset) { _, event in
-                    Text(event).font(.caption2.monospaced()).textSelection(.enabled)
-                }
-                HStack {
-                    Button("复制诊断") {
-                        UIPasteboard.general.string = incomingRouter.events.joined(separator: "\n")
+
+                settingsCard("浏览器") {
+                    HStack {
+                        Text("网页外观")
+                        Spacer(minLength: 8)
+                        Picker("网页外观", selection: $webAppearanceMode) {
+                            Text("智能深色").tag("auto")
+                            Text("始终深色").tag("always")
+                            Text("网站原样").tag("off")
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .tint(.cyan)
                     }
-                    Spacer()
-                    Button("清空") { incomingRouter.clear() }
-                        .foregroundStyle(.secondary)
+                    Button(role: .destructive) {
+                        showHistoryClear = true
+                    } label: {
+                        Text("清除浏览历史")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    footnote("清除历史不会清理浏览器 Cookie 或取消正在进行的下载。")
+                }
+
+                settingsCard("拖放诊断") {
+                    footnote("拖到主屏幕图标后若 App 打开但网页没有打开，请复制下方记录。记录只包含事件类型和网站域名，不包含完整 URL 或授权参数。")
+                    ForEach(Array(incomingRouter.events.prefix(10).enumerated()), id: \.offset) { _, event in
+                        Text(event)
+                            .font(.caption2.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    HStack {
+                        Button("复制诊断") {
+                            UIPasteboard.general.string = incomingRouter.events.joined(separator: "\n")
+                        }
+                        Spacer()
+                        Button("清空") { incomingRouter.clear() }
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                settingsCard("隐私与诊断") {
+                    footnote("任务详情支持分享脱敏诊断报告，不包含完整签名链接、密码或 Cookie。")
+                    footnote("下载文件仅保存在本机的「文件 → 在我的 iPhone 上 → 后台下载 → Downloads」。")
                 }
             }
-            Section("隐私与诊断") {
-                Text("任务详情支持分享脱敏诊断报告，不包含完整签名链接、密码或 Cookie。")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Text("下载文件仅保存在本机的「文件 → 在我的 iPhone 上 → 后台下载 → Downloads」。")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
         }
+        .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("设置")
         .confirmationDialog("清除浏览历史？", isPresented: $showHistoryClear) {
             Button("清除历史", role: .destructive) { BrowserLibrary.shared.clearHistory() }
+        }
+    }
+
+    private var appVersion: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return build.isEmpty ? short : "\(short) (\(build))"
+    }
+
+    private func statCell(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value).font(.title3.weight(.semibold)).monospacedDigit()
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func settingsCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 4)
+            VStack(alignment: .leading, spacing: 14) { content() }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 }

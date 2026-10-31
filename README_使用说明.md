@@ -202,3 +202,10 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 改回 UIKit，但这次挂在 `window.rootViewController.view` 上。它是三个 tab 的共同祖先，下载页和设置页都在它下面；不是 2.1.3 那个无效的 UIWindow。
 - 拖拽进入任何页面时显示全屏「松手打开链接」提示，松手后走原有 `DroppedLinkReader` 和浏览器路由；失败仍弹窗并写入拖放诊断。
 - 2.1.4 的图标注册不变。
+
+## 2.1.7 · 用 ScrollView 重做下载页和设置页
+
+- 红框测试确认：拖放只在页面顶部生效，滚动区域被 SwiftUI 的 `List` / `Form` 吃掉。这是 List 的已知限制，不是根视图拖放的问题。
+- 设置页去掉 `Form`，改为 `ScrollView` 加卡片分组；版本号改为读取 Info.plist，原来写死的「BackgroundDL 2.0」不再出现过期版本。
+- 下载页去掉 `List`，改为 `ScrollView` 加 `LazyVStack`；行内「…」菜单和长按菜单保留全部操作，左滑手势随 List 一并移除。
+- 两页的滚动区域现在都由根视图接收拖放，任意位置可拖入。

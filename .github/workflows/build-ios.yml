@@ -57,7 +57,7 @@ jobs:
           assert "pendingDeletion" not in ui
           print("PASS: iOS 26 system progress and legacy fallback")
           PY
-      - name: Validate immediate swipe delete and compact list
+      - name: Validate compact scroll views and delete path
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -66,13 +66,13 @@ jobs:
           assert "func deleteImmediately(id: UUID, deleteFile: Bool)" in src
           assert "DownloadDeleteSheet" not in src
           assert "pendingDeletion" not in src
-          assert "Button { remove(item.status == .completed) }" in src
-          assert "allowsFullSwipe: false" in src
-          assert ".listStyle(.plain)" in src
+          assert "LazyVStack" in src
+          assert "CompactDownloadRow(" in src
+          assert "settingsCard(" in src
           assert ".navigationBarTitleDisplayMode(.inline)" in src
           assert 'Text("打开分享链接")' in browser
           assert 'Text("浏览器主页").font(.largeTitle.bold())' not in browser
-          print("PASS: swipe delete without confirmation and compact screens")
+          print("PASS: scroll-view pages, delete path and compact screens")
           PY
       - name: Validate captured download banner navigation
         run: |
@@ -130,7 +130,7 @@ jobs:
           assert "func application(_ application: UIApplication," in app
           assert ".onContinueUserActivity(NSUserActivityTypeBrowsingWeb)" in content
           assert "onChange(of: incomingRouter.revision)" in content
-          assert 'Section("拖放诊断")' in content
+          assert 'settingsCard("拖放诊断")' in content
           assert 'acceptDroppedProviders:' in browser
           print("PASS: cold and warm URL entry points, Internet Location parsing, diagnostics")
           PY
