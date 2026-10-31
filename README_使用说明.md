@@ -183,3 +183,9 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 2.1.1 与 2.1.2 的真机结论：未设默认浏览器的 Chrome 也能接住图标拖放；Chrome、Firefox 的 App entitlements 都带 `com.apple.developer.web-browser`。这是 Apple 审批的 managed entitlement，个人侧载 profile 里没有，图标拖放对侧载 App 走不通，后续不再加 plist 键。
 - App 内拖放改为窗口级 `UIDropInteraction`：挂在 host window 上，浏览器、下载、设置三个 tab 的任意位置都能接住链接。原来的 TabView 级 `.onDrop` 覆盖不到设置表单和下载列表的滚动视图。
 - 解析仍走 `DroppedLinkReader`；失败照旧写入「设置 → 拖放诊断」并弹窗。
+
+## 2.1.4 · 对齐 Via 的 URL 注册
+
+- 拆开同一证书签名的 Via 1.9.0 IPA：entitlements 只有 `application-identifier`、`team-identifier`、iCloud 容器和 `aps-environment`，没有 `com.apple.developer.web-browser`；Info.plist 没有 `CFBundleDocumentTypes`，`CFBundleURLTypes` 是 http / https / viabrowser 加 `CFBundleTypeRole = Editor`。
+- 结论：图标拖放不需要 web-browser entitlement，之前的判断错了。差别在注册：2.1.2 多了 public.url 文档类型，URL 角色用了 Viewer。
+- 2.1.4 对齐 Via：删掉 `CFBundleDocumentTypes`，`CFBundleURLTypes` 改为 Editor，`CFBundleURLName` 用 bundle id，schemes 增加 `backgrounddl`，后续 Safari 扩展或快捷指令入口可直接用。

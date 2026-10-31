@@ -17,39 +17,23 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.1.3</string>
+	<string>2.1.4</string>
 	<key>CFBundleVersion</key>
-	<string>28</string>
-	<!-- Experimental system document type for URL drops onto app icon.
-         This only advertises support; SpringBoard controls icon drop behavior. -->
-	<key>CFBundleDocumentTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>网页链接</string>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.url</string>
-			</array>
-		</dict>
-	</array>
-	<!-- Web links are opened as URLs, not as documents. Chrome and Firefox
-         declare the HTTP and HTTPS schemes here and no public.url document type. -->
+	<string>29</string>
+	<!-- Via 1.9.0, signed with the same certificate, has no document types:
+         web URLs are handled as URL schemes with the Editor role. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.example.backgrounddl.web</string>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
+			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>http</string>
 				<string>https</string>
+				<string>backgrounddl</string>
 			</array>
 		</dict>
 	</array>
