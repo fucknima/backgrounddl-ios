@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class BrowserState: ObservableObject {
@@ -68,6 +69,7 @@ struct BrowserView: View {
     let sharedURL: URL?
     let openDownloads: () -> Void
     let incomingLinkRevision: UUID
+    let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
@@ -177,6 +179,11 @@ struct BrowserView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The WKWebView fills most of the screen and can otherwise absorb
+            // drops before the TabView-level handler has a chance to see them.
+            .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) {
+                acceptDroppedProviders($0)
+            }
 
             HStack(spacing: 18) {
                 Button { state.goHome() } label: { Image(systemName: "house") }

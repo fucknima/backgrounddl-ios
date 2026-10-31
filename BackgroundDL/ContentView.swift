@@ -11,6 +11,8 @@ struct ContentView: View {
     @State private var selectedTab: MainTab = .browser
     @State private var sharedURL: URL?
     @State private var incomingLinkRevision = UUID()
+    @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
+    @State private var lastConsumedRevision: UUID?
     @State private var isDropTargeted = false
     @State private var linkError = ""
     @State private var showLinkError = false
@@ -20,7 +22,8 @@ struct ContentView: View {
             NavigationStack {
                 BrowserView(sharedURL: sharedURL, openDownloads: {
                     selectedTab = .downloads
-                }, incomingLinkRevision: incomingLinkRevision)
+                }, incomingLinkRevision: incomingLinkRevision,
+                   acceptDroppedProviders: { providers in importDrop(providers) })
             }
                 .tabItem { Label("浏览器", systemImage: "safari") }
                 .tag(MainTab.browser)
@@ -34,10 +37,17 @@ struct ContentView: View {
         .tint(.cyan)
         // Receives system-delivered URL documents, including candidates dropped
         // onto the app icon when iOS elects to dispatch them to third-party apps.
-        .onOpenURL { url in acceptIncoming(url) }
+        .onOpenURL { url in incomingRouter.receive(url, from: "SwiftUI onOpenURL") }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            if let url = activity.webpageURL {
+                incomingRouter.receive(url, from: "SwiftUI 用户活动")
+            } else {
+                incomingRouter.note("SwiftUI 用户活动没有网页链接")
+            }
+        }
         // Also accepts links dropped after the app has opened. The separate
         // SwiftUI drop target is a fallback for origins that offer plain text.
-        .onDrop(of: [UTType.url, UTType.plainText], isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: $isDropTargeted) { providers in
             importDrop(providers)
         }
         .overlay(alignment: .center) {
@@ -53,72 +63,78 @@ struct ContentView: View {
         .alert("无法打开链接", isPresented: $showLinkError) {
             Button("确定", role: .cancel) {}
         } message: { Text(linkError) }
-        .onAppear(perform: acceptSharedLink)
+        .onAppear {
+            incomingRouter.note("主界面出现")
+            acceptSharedLink()
+            consumePendingLink()
+        }
+        .onChange(of: incomingRouter.revision) { _, _ in consumePendingLink() }
+        .onChange(of: isDropTargeted) { _, targeted in
+            if targeted { incomingRouter.note("拖放目标已进入") }
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { acceptSharedLink() }
+            if phase == .active {
+                incomingRouter.note("App 回到前台")
+                acceptSharedLink()
+                consumePendingLink()
+            }
         }
     }
 
     private func acceptSharedLink() {
         guard let url = SharedLinkInbox.takeNext() else { return }
-        acceptIncoming(url)
+        incomingRouter.receive(url, from: "系统分享收件箱")
     }
 
-    private func acceptIncoming(_ incoming: URL) {
-        guard let scheme = incoming.scheme?.lowercased(),
-              (scheme == "https" || scheme == "http"),
-              incoming.host != nil, incoming.user == nil, incoming.password == nil else {
-            linkError = "仅支持 HTTP 或 HTTPS 网页链接。"
-            showLinkError = true
-            return
-        }
-        sharedURL = incoming
-        // A fresh revision makes identical consecutive drops open the link again.
+    private func consumePendingLink() {
+        guard let url = incomingRouter.latestURL,
+              lastConsumedRevision != incomingRouter.revision else { return }
+        lastConsumedRevision = incomingRouter.revision
+        sharedURL = url
         incomingLinkRevision = UUID()
         selectedTab = .browser
+        incomingRouter.note("浏览器已打开：\(url.host ?? "网页")")
     }
 
     private func importDrop(_ providers: [NSItemProvider]) -> Bool {
+        let typeNames = providers.flatMap { $0.registeredTypeIdentifiers }.joined(separator: ",")
+        incomingRouter.note("onDrop 收到 \(providers.count) 项：\(String(typeNames.prefix(110)))")
         guard let provider = providers.first(where: {
             $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) ||
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ||
             $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier)
-        }) else { return false }
+        }) else {
+            incomingRouter.note("没有支持的拖放类型")
+            return false
+        }
         let type = provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
-            ? UTType.url.identifier : UTType.plainText.identifier
-        // The load must start synchronously inside the drop callback: iOS does
-        // not guarantee access to the item provider after the callback returns.
+            ? UTType.url.identifier
+            : provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+                ? UTType.fileURL.identifier : UTType.plainText.identifier
+
+        // Begin loading before the drop handler returns, as required for item providers.
         provider.loadItem(forTypeIdentifier: type, options: nil) { item, error in
-            let link: URL?
-            if let value = item as? URL { link = value }
-            else if let value = item as? String { link = Self.extractWebURL(value) }
-            else if let data = item as? Data, let text = String(data: data, encoding: .utf8) {
-                link = Self.extractWebURL(text)
-            } else { link = nil }
-            DispatchQueue.main.async {
-                if let link {
-                    acceptIncoming(link)
+            let resolved: URL?
+            if let url = item as? URL {
+                resolved = IncomingLinkDecoder.resolve(url)
+            } else if let raw = item as? String {
+                resolved = IncomingLinkDecoder.extract(raw)
+            } else if let data = item as? Data {
+                resolved = IncomingLinkDecoder.resolvePayload(data)
+            } else {
+                resolved = nil
+            }
+            Task { @MainActor in
+                if let resolved {
+                    incomingRouter.receive(resolved, from: "App 内 onDrop")
                 } else {
-                    linkError = error?.localizedDescription ?? "拖入内容不是可识别的网页链接。"
+                    incomingRouter.note(error == nil ? "拖放内容未解析：无匹配数据" : "拖放内容未解析：载入错误")
+                    linkError = "这次拖放未收到有效的网址。请到「设置 → 拖放诊断」查看记录。"
                     showLinkError = true
                 }
             }
         }
         return true
-    }
-
-    private static func extractWebURL(_ text: String) -> URL? {
-        let stripped = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let url = URL(string: stripped), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-            return url
-        }
-        // A dragged text selection can include surrounding text. Extract only
-        // a normal web link; never execute arbitrary script or custom schemes.
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue),
-              let match = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let url = match.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
-            return nil
-        }
-        return url
     }
 }
 
@@ -670,6 +686,7 @@ private struct DownloadDetailView: View {
 
 private struct DownloadSettingsView: View {
     @ObservedObject private var store = DownloadStore.shared
+    @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
     @AppStorage("bgdl.downloadMode") private var downloadMode = "smart"
     @AppStorage("bgdl.notifyDownloads") private var notifyDownloads = false
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
@@ -714,6 +731,21 @@ private struct DownloadSettingsView: View {
                 Button("清除浏览历史", role: .destructive) { showHistoryClear = true }
                 Text("清除历史不会清理浏览器 Cookie 或取消正在进行的下载。")
                     .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("拖放诊断") {
+                Text("拖到主屏幕图标后若 App 打开但网页没有打开，请复制下方记录。记录只包含事件类型和网站域名，不包含完整 URL 或授权参数。")
+                    .font(.footnote).foregroundStyle(.secondary)
+                ForEach(Array(incomingRouter.events.prefix(10).enumerated()), id: \.offset) { _, event in
+                    Text(event).font(.caption2.monospaced()).textSelection(.enabled)
+                }
+                HStack {
+                    Button("复制诊断") {
+                        UIPasteboard.general.string = incomingRouter.events.joined(separator: "\n")
+                    }
+                    Spacer()
+                    Button("清空") { incomingRouter.clear() }
+                        .foregroundStyle(.secondary)
+                }
             }
             Section("隐私与诊断") {
                 Text("任务详情支持分享脱敏诊断报告，不包含完整签名链接、密码或 Cookie。")

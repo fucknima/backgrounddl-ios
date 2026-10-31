@@ -99,7 +99,7 @@ jobs:
                      for entry in plist["CFBundleDocumentTypes"])
           app = Path("BackgroundDL/ContentView.swift").read_text()
           browser = Path("BackgroundDL/BrowserView.swift").read_text()
-          assert ".onOpenURL { url in acceptIncoming(url) }" in app
+          assert '.onOpenURL { url in incomingRouter.receive(url, from: "SwiftUI onOpenURL") }' in app
           assert "UTType.url, UTType.plainText" in app
           assert "incomingLinkRevision = UUID()" in app
           assert "private func importDrop(" in app
@@ -107,6 +107,25 @@ jobs:
           assert ".onChange(of: incomingLinkRevision)" in browser
           assert 'let incomingLinkRevision: UUID' in browser
           print("PASS: document type registration, URL callback, cross-app drop and duplicate-link handling")
+          PY
+      - name: Validate drag-drop ingestion diagnostics and cold launch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          app = Path("BackgroundDL/BackgroundDLApp.swift").read_text()
+          content = Path("BackgroundDL/ContentView.swift").read_text()
+          browser = Path("BackgroundDL/BrowserView.swift").read_text()
+          assert "IncomingLinkRouter" in app
+          assert "IncomingLinkDecoder" in app
+          assert "startAccessingSecurityScopedResource()" in app
+          assert "PropertyListSerialization.propertyList" in app
+          assert "AppDelegate openURL" in app
+          assert "func application(_ application: UIApplication," in app
+          assert ".onContinueUserActivity(NSUserActivityTypeBrowsingWeb)" in content
+          assert "onChange(of: incomingRouter.revision)" in content
+          assert 'Section("拖放诊断")' in content
+          assert 'acceptDroppedProviders:' in browser
+          print("PASS: cold and warm URL entry points, Internet Location parsing, diagnostics")
           PY
       - name: Build without code signing
         shell: bash
