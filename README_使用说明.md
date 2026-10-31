@@ -141,3 +141,11 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 新增「设置 → 拖放诊断」，持久记录最近的事件名、输入类型与目标域名；不保存完整网址、签名参数或 Cookie，支持复制及清空。
 - 支持相同链接连续拖入；对同一系统交付造成的近距离重复回调作短暂去重，避免重复开启网页。
 - 实际主屏幕图标的绿色＋由 iOS 提供。若 App 能启动却仍无链接，诊断记录可定位是否根本没有收到系统事件，不能仅凭 Xcode 编译声称完全修复。
+
+## 2.0.8 · UIScene 冷启动拖放链接排查与接收
+
+- 针对设备上绿色＋已出现、App 成功唤醒但只有前台日志的问题，增加 Apple 官方推荐的 SwiftUI 场景代理配置。
+- 通过 `UIApplicationDelegate.application(_:configurationForConnecting:options:)` 将 `DownloadSceneDelegate` 接入已有的 SwiftUI `WindowGroup`，不修改下载器的后台会话与数据库。
+- 分别处理 `scene(_:willConnectTo:options:)` 的冷启动 URL/用户活动、`scene(_:openURLContexts:)` 的运行中 URL 和 `scene(_:continue:)` 的网页用户活动。共用 2.0.7 的安全链接解析与跳转路由。
+- 「设置 → 拖放诊断」记录“场景配置请求”“Scene 冷启动”的 URL/用户活动数量；若均为 0，意味着这些公开入口没有收到可用于跳转的链接，不能假装已实现 Safari 专有图标释放交互。
+- 保留 App 内 onDrop、系统分享扩展及原下载功能。苹果的拖放框架主要面向 App 内实际放置区域，绿色＋本身不能证明系统已向第三方 App 发送 URL。

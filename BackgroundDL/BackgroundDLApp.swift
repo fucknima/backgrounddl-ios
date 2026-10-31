@@ -49,6 +49,23 @@ final class DownloaderAppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
+    // SwiftUI's WindowGroup uses the UIScene lifecycle. A cold document/URL
+    // launch may be delivered in connectionOptions, not AppDelegate's launchOptions.
+    // Apple's SwiftUI documentation supports supplying a UIWindowSceneDelegate
+    // through this configuration method without taking over SwiftUI's window.
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        IncomingLinkRouter.shared.note(
+            "场景配置请求：URL \(options.urlContexts.count)，用户活动 \(options.userActivities.count)"
+        )
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        if connectingSceneSession.role == .windowApplication {
+            configuration.delegateClass = DownloadSceneDelegate.self
+        }
+        return configuration
+    }
+
     func application(_ application: UIApplication,
                      handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
@@ -177,5 +194,47 @@ enum IncomingLinkDecoder {
         guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               url.host != nil, url.user == nil, url.password == nil else { return nil }
         return url
+    }
+}
+
+
+// UIScene handles launch-time URL/document payloads that don't reach the
+// UIApplicationDelegate on SwiftUI scene-based applications. Keep this delegate
+// diagnostic and additive; SwiftUI still manages the WindowGroup.
+@MainActor
+final class DownloadSceneDelegate: NSObject, UIWindowSceneDelegate {
+    func scene(_ scene: UIScene,
+               willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        let urlCount = connectionOptions.urlContexts.count
+        let activityCount = connectionOptions.userActivities.count
+        IncomingLinkRouter.shared.note(
+            "Scene 冷启动：URL \(urlCount)，用户活动 \(activityCount)"
+        )
+        for context in connectionOptions.urlContexts {
+            IncomingLinkRouter.shared.receive(context.url, from: "Scene 冷启动 URL")
+        }
+        for activity in connectionOptions.userActivities {
+            receive(activity, source: "Scene 冷启动用户活动")
+        }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        IncomingLinkRouter.shared.note("Scene 运行中 URL：\(URLContexts.count)")
+        for context in URLContexts {
+            IncomingLinkRouter.shared.receive(context.url, from: "Scene openURLContexts")
+        }
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        receive(userActivity, source: "Scene continue")
+    }
+
+    private func receive(_ activity: NSUserActivity, source: String) {
+        guard let url = activity.webpageURL else {
+            IncomingLinkRouter.shared.note("\(source) 收到 \(activity.activityType)，无网页 URL")
+            return
+        }
+        IncomingLinkRouter.shared.receive(url, from: source)
     }
 }
