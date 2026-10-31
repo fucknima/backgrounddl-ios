@@ -1,5 +1,6 @@
 import SwiftUI
 import QuickLook
+import Combine
 import UIKit
 import UniformTypeIdentifiers
 
@@ -19,6 +20,8 @@ private enum MainTab: Hashable {
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: MainTab = .browser
+    @StateObject private var browserState = BrowserState()
+    @State private var keyboardVisible = false
     @State private var sharedURL: URL?
     @State private var incomingLinkRevision = UUID()
     @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
@@ -28,23 +31,40 @@ struct ContentView: View {
     @State private var showLinkError = false
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationStack {
-                BrowserView(sharedURL: sharedURL, openDownloads: {
-                    selectedTab = .downloads
-                }, incomingLinkRevision: incomingLinkRevision,
-                   acceptDroppedProviders: { providers in importDrop(providers) })
+        ZStack(alignment: .bottom) {
+            TabView(selection: $selectedTab) {
+                NavigationStack {
+                    BrowserView(state: browserState,
+                                sharedURL: sharedURL,
+                                openDownloads: { selectedTab = .downloads },
+                                openSettings: { selectedTab = .settings },
+                                incomingLinkRevision: incomingLinkRevision,
+                                acceptDroppedProviders: { providers in importDrop(providers) })
+                }
+                    .tabItem { Label("浏览器", systemImage: "safari") }
+                    .tag(MainTab.browser)
+                    .toolbar(.hidden, for: .tabBar)
+                NavigationStack { DownloadListView() }
+                    .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
+                    .tag(MainTab.downloads)
+                    .toolbar(.hidden, for: .tabBar)
+                NavigationStack { DownloadSettingsView() }
+                    .tabItem { Label("设置", systemImage: "gearshape") }
+                    .tag(MainTab.settings)
+                    .toolbar(.hidden, for: .tabBar)
             }
-                .tabItem { Label("浏览器", systemImage: "safari") }
-                .tag(MainTab.browser)
-            NavigationStack { DownloadListView() }
-                .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
-                .tag(MainTab.downloads)
-            NavigationStack { DownloadSettingsView() }
-                .tabItem { Label("设置", systemImage: "gearshape") }
-                .tag(MainTab.settings)
+            .tint(.cyan)
+            .toolbar(.hidden, for: .tabBar)
+
+            if !keyboardVisible {
+                AppBottomBar(selectedTab: $selectedTab,
+                             browser: browserState,
+                             openDownloads: { selectedTab = .downloads })
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .tint(.cyan)
         // Receives system-delivered URL documents, including candidates dropped
         // onto the app icon when iOS elects to dispatch them to third-party apps.
         .onOpenURL { url in incomingRouter.receive(url, from: "SwiftUI onOpenURL") }
@@ -108,6 +128,12 @@ struct ContentView: View {
                 consumePendingLink()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = false }
+        }
     }
 
     private func acceptSharedLink() {
@@ -142,6 +168,91 @@ struct ContentView: View {
     }
 }
 
+
+private struct AppBottomBar: View {
+    @Binding var selectedTab: MainTab
+    @ObservedObject var browser: BrowserState
+    let openDownloads: () -> Void
+    @Namespace private var selectionPill
+
+    var body: some View {
+        ZStack {
+            browserControls
+                .opacity(selectedTab == .browser ? 1 : 0)
+                .scaleEffect(selectedTab == .browser ? 1 : 0.96)
+                .allowsHitTesting(selectedTab == .browser)
+            tabControls
+                .opacity(selectedTab == .browser ? 0 : 1)
+                .scaleEffect(selectedTab == .browser ? 0.96 : 1)
+                .allowsHitTesting(selectedTab != .browser)
+        }
+        .frame(height: 58)
+        .background(.regularMaterial, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(AppTheme.border)
+        }
+        .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
+        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: selectedTab)
+    }
+
+    private var browserControls: some View {
+        HStack(spacing: 0) {
+            control("chevron.left", enabled: browser.canGoBack) { browser.webView?.goBack() }
+            control("chevron.right", enabled: browser.canGoForward) { browser.webView?.goForward() }
+            control("house", enabled: true) { browser.goHome() }
+            control("arrow.clockwise", enabled: browser.webView?.url != nil) { browser.webView?.reload() }
+            control("arrow.down.circle", enabled: true) { openDownloads() }
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private var tabControls: some View {
+        HStack(spacing: 0) {
+            tabButton(.browser, "浏览器", "safari")
+            tabButton(.downloads, "下载", "arrow.down.circle.fill")
+            tabButton(.settings, "设置", "gearshape.fill")
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private func control(_ systemImage: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.35))
+        .disabled(!enabled)
+    }
+
+    private func tabButton(_ tab: MainTab, _ title: String, _ icon: String) -> some View {
+        Button {
+            selectedTab = tab
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .semibold))
+                Text(title)
+                    .font(.caption2.weight(.medium))
+            }
+            .foregroundStyle(selectedTab == tab ? AppTheme.accent : Color.secondary)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background {
+                if selectedTab == tab {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.07))
+                        .matchedGeometryEffect(id: "selectedTabPill", in: selectionPill)
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 12)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
 
 /// A drop target installed on the root controller view. It is an ancestor of
 /// every tab, so the settings form and the downloads list are covered without
@@ -540,7 +651,7 @@ private final class DownloadTableController: UITableViewController {
         tableView.backgroundColor = .clear
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 120
-        tableView.contentInset = UIEdgeInsets(top: 4, left: 0, bottom: 28, right: 0)
+        tableView.contentInset = UIEdgeInsets(top: 4, left: 0, bottom: 96, right: 0)
         tableView.showsVerticalScrollIndicator = false
     }
 
@@ -1070,7 +1181,8 @@ private struct DownloadSettingsView: View {
                 }
             }
             .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 96)
         }
         .background(AppTheme.pageBackground)
         .navigationTitle("设置")

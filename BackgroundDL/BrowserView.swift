@@ -66,11 +66,12 @@ final class BrowserState: ObservableObject {
 }
 
 struct BrowserView: View {
+    @ObservedObject var state: BrowserState
     let sharedURL: URL?
     let openDownloads: () -> Void
+    let openSettings: () -> Void
     let incomingLinkRevision: UUID
     let acceptDroppedProviders: ([NSItemProvider]) -> Bool
-    @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
     @ObservedObject private var library = BrowserLibrary.shared
@@ -92,7 +93,6 @@ struct BrowserView: View {
             .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) {
                 acceptDroppedProviders($0)
             }
-            bottomBar
         }
         .background(AppTheme.pageBackground)
         .onAppear {
@@ -160,6 +160,12 @@ struct BrowserView: View {
                 }
                 Button { showHistory = true } label: {
                     Label("浏览历史", systemImage: "clock.arrow.circlepath")
+                }
+                Button { openDownloads() } label: {
+                    Label("下载列表", systemImage: "arrow.down.circle")
+                }
+                Button { openSettings() } label: {
+                    Label("设置", systemImage: "gearshape")
                 }
                 Divider()
                 Button {
@@ -245,36 +251,6 @@ struct BrowserView: View {
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 6)
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 0) {
-            navButton("chevron.left", enabled: state.canGoBack) { state.webView?.goBack() }
-            navButton("chevron.right", enabled: state.canGoForward) { state.webView?.goForward() }
-            navButton("house", enabled: true) { state.goHome() }
-            navButton("arrow.clockwise", enabled: state.webView?.url != nil) { state.webView?.reload() }
-            navButton("arrow.down.circle", enabled: true) { openDownloads() }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7)
-        .background(.regularMaterial, in: Capsule())
-        .overlay {
-            Capsule().strokeBorder(AppTheme.border)
-        }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 6)
-    }
-
-    private func navButton(_ systemImage: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: 38)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.35))
-        .disabled(!enabled)
     }
 
     private func open() {
@@ -646,7 +622,8 @@ private struct BrowserStartPage: View {
                 if library.history.isEmpty && library.bookmarks.isEmpty { empty }
             }
             .padding(.horizontal, AppTheme.pagePadding)
-            .padding(.vertical, 18)
+            .padding(.top, 18)
+            .padding(.bottom, 96)
         }
         .background(AppTheme.pageBackground)
     }

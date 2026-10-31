@@ -81,7 +81,11 @@ jobs:
           from pathlib import Path
           root = Path("BackgroundDL/ContentView.swift").read_text()
           browser = Path("BackgroundDL/BrowserView.swift").read_text()
-          assert "BrowserView(sharedURL: sharedURL, openDownloads:" in root
+          assert "BrowserView(state: browserState," in root
+          assert "openSettings: { selectedTab = .settings }" in root
+          assert "AppBottomBar(selectedTab: $selectedTab," in root
+          assert "matchedGeometryEffect" in root
+          assert ".toolbar(.hidden, for: .tabBar)" in root
           assert "selectedTab = .downloads" in root
           assert "let openDownloads: () -> Void" in browser
           assert 'state.notice = ""\n                openDownloads()' in browser
