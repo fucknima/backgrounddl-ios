@@ -100,7 +100,7 @@ jobs:
           app = Path("BackgroundDL/ContentView.swift").read_text()
           browser = Path("BackgroundDL/BrowserView.swift").read_text()
           assert '.onOpenURL { url in incomingRouter.receive(url, from: "SwiftUI onOpenURL") }' in app
-          assert "UTType.url, UTType.plainText" in app
+          assert "UTType.url, UTType.fileURL, UTType.plainText" in app
           assert "incomingLinkRevision = UUID()" in app
           assert "private func importDrop(" in app
           assert 'incomingLinkRevision: incomingLinkRevision' in app
