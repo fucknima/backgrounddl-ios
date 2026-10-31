@@ -2,8 +2,10 @@ import Foundation
 import UniformTypeIdentifiers
 
 /// Decodes the *contents* of an item provider, not just its advertised UTI.
-/// Safari and other sources may vend "public.url" as a URL object, UTF-8
-/// bytes, a property list, or a generic item. Each representation is optional.
+/// Safari and other apps may vend "public.url" as a URL object, as UTF-8 bytes,
+/// as a property list, or as a generic item. A cross-process provider can also
+/// answer `loadItem` with (nil, nil); no cast can recover that, so every
+/// advertised representation is requested in parallel.
 enum DroppedLinkCodec {
     static let maximumBytes = 128_000
 
@@ -55,6 +57,8 @@ enum DroppedLinkCodec {
         if let data = item as? Data { return decode(data) }
         if let data = item as? NSData { return decode(data as Data) }
         if let attributed = item as? NSAttributedString { return extract(attributed.string) }
+        if let dictionary = item as? [String: Any],
+           let value = dictionary["URL"] as? String { return extract(value) }
         return nil
     }
 
@@ -82,6 +86,8 @@ enum DroppedLinkCodec {
     }
 }
 
+/// One resolution for the whole drop. The first decoded URL wins; failures and
+/// timeouts finish once, so no completion can be delivered twice.
 @MainActor
 private final class DroppedLinkResolution {
     private var remaining: Int
@@ -101,50 +107,90 @@ private final class DroppedLinkResolution {
             settled = true
             note("拖放解析成功：\(method) → \(url.host ?? "网页")")
             finish(url)
-        } else {
-            remaining -= 1
-            note("拖放读取未匹配：\(method)（\(detail)）")
-            if remaining == 0 {
-                settled = true
-                finish(nil)
-            }
+            return
         }
+        remaining -= 1
+        note("拖放读取未匹配：\(method)（\(detail)）")
+        if remaining <= 0 {
+            settled = true
+            note("拖放全部表示均未解析出网址")
+            finish(nil)
+        }
+    }
+
+    func expire() {
+        guard !settled else { return }
+        settled = true
+        note("拖放读取超时：\(max(remaining, 0)) 个表示未回调")
+        finish(nil)
     }
 }
 
-/// Starts ALL registered representation requests while the onDrop callback is
-/// still executing. A failed public.url request cannot suppress the plain-text
-/// fallback, which Safari often advertises alongside the URL representation.
+/// What one item provider advertises. The same identifier can be loaded as an
+/// object, as bytes, and as a raw item; each path fails differently on device,
+/// so all of them are started before the onDrop callback returns.
+private struct DroppedRepresentations {
+    let provider: NSItemProvider
+    let urlObject: Bool
+    let stringObject: Bool
+    let urlItem: Bool
+    let urlData: Bool
+    let plainTextData: Bool
+    let fileURLItem: Bool
+
+    init(_ provider: NSItemProvider) {
+        self.provider = provider
+        let advertisesURL = provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
+        urlObject = provider.canLoadObject(ofClass: URL.self)
+        stringObject = provider.canLoadObject(ofClass: String.self)
+        urlItem = advertisesURL
+        urlData = advertisesURL
+        plainTextData = provider.hasItemConformingToTypeIdentifier(UTType.utf8PlainText.identifier)
+        fileURLItem = provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+    }
+
+    var count: Int {
+        [urlObject, stringObject, urlItem, urlData, plainTextData, fileURLItem]
+            .reduce(0) { $0 + ($1 ? 1 : 0) }
+    }
+}
+
+/// Starts every registered representation request while the onDrop callback is
+/// still executing, across every dropped item. A representation that never
+/// answers is cut by `deadline`, so a broken provider cannot leave the drop
+/// silently doing nothing.
 @MainActor
 enum DroppedLinkReader {
+    static let deadline: TimeInterval = 3
+
     static func load(
         providers: [NSItemProvider],
         note: @escaping (String) -> Void,
         completion: @escaping (URL?) -> Void
     ) -> Bool {
-        guard let provider = providers.first(where: {
-            $0.canLoadObject(ofClass: URL.self) ||
-            $0.canLoadObject(ofClass: String.self) ||
-            $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) ||
-            $0.hasItemConformingToTypeIdentifier(UTType.utf8PlainText.identifier)
-        }) else {
-            note("拖放没有支持的 URL 或文本表示")
+        let plans = providers.prefix(4)
+            .map { DroppedRepresentations($0) }
+            .filter { $0.count > 0 }
+        guard !plans.isEmpty else {
+            note("拖放没有可读取的 URL 或文本表示")
             return false
         }
 
-        let useURLObject = provider.canLoadObject(ofClass: URL.self)
-        let useStringObject = provider.canLoadObject(ofClass: String.self)
-        let useURLData = provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
-        let usePlainData = provider.hasItemConformingToTypeIdentifier(UTType.utf8PlainText.identifier)
-        let useURLItem = useURLData
+        let attempts = plans.reduce(0) { $0 + $1.count }
+        note("拖放读取策略：\(plans.count) 项 / \(attempts) 个表示")
 
-        let attempts = [useURLObject, useStringObject, useURLData, usePlainData, useURLItem]
-            .filter { $0 }.count
-        guard attempts > 0 else { return false }
-        note("拖放读取策略：URL对象=\(useURLObject)，文本对象=\(useStringObject)，URL数据=\(useURLData)，文本数据=\(usePlainData)")
         let state = DroppedLinkResolution(attempts: attempts, note: note, finish: completion)
+        DispatchQueue.main.asyncAfter(deadline: .now() + deadline) {
+            state.expire()
+        }
+        for plan in plans { start(plan, state: state) }
+        return true
+    }
 
-        if useURLObject {
+    private static func start(_ plan: DroppedRepresentations, state: DroppedLinkResolution) {
+        let provider = plan.provider
+
+        if plan.urlObject {
             _ = provider.loadObject(ofClass: URL.self) { url, error in
                 DispatchQueue.main.async {
                     state.report(url.flatMap(DroppedLinkCodec.resolve), method: "URL对象",
@@ -152,7 +198,7 @@ enum DroppedLinkReader {
                 }
             }
         }
-        if useStringObject {
+        if plan.stringObject {
             _ = provider.loadObject(ofClass: String.self) { text, error in
                 DispatchQueue.main.async {
                     state.report(text.flatMap(DroppedLinkCodec.extract), method: "文本对象",
@@ -160,7 +206,7 @@ enum DroppedLinkReader {
                 }
             }
         }
-        if useURLData {
+        if plan.urlData {
             _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.url.identifier) { data, error in
                 DispatchQueue.main.async {
                     state.report(data.flatMap(DroppedLinkCodec.decode), method: "public.url 数据",
@@ -168,15 +214,7 @@ enum DroppedLinkReader {
                 }
             }
         }
-        if usePlainData {
-            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, error in
-                DispatchQueue.main.async {
-                    state.report(data.flatMap(DroppedLinkCodec.decode), method: "UTF-8文本数据",
-                                 detail: error == nil ? "\(data?.count ?? 0)B" : "读取错误")
-                }
-            }
-        }
-        if useURLItem {
+        if plan.urlItem {
             _ = provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, error in
                 DispatchQueue.main.async {
                     let typeName = item.map { String(describing: type(of: $0)) } ?? "空"
@@ -185,6 +223,21 @@ enum DroppedLinkReader {
                 }
             }
         }
-        return true
+        if plan.plainTextData {
+            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, error in
+                DispatchQueue.main.async {
+                    state.report(data.flatMap(DroppedLinkCodec.decode), method: "UTF-8文本数据",
+                                 detail: error == nil ? "\(data?.count ?? 0)B" : "读取错误")
+                }
+            }
+        }
+        if plan.fileURLItem {
+            _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                DispatchQueue.main.async {
+                    state.report(DroppedLinkCodec.decode(item: item), method: "文件URL对象",
+                                 detail: error == nil ? "已读取" : "读取错误")
+                }
+            }
+        }
     }
 }

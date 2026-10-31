@@ -28,6 +28,7 @@ struct DropLinkVerification {
         same(DroppedLinkCodec.decode(archivedURL), "secure NSURL archive")
         same(DroppedLinkCodec.decode(item: expected as NSString), "NSString object")
         same(DroppedLinkCodec.decode(item: NSURL(string: expected)!), "NSURL object")
+        same(DroppedLinkCodec.decode(item: ["URL": expected] as NSDictionary), "webloc dictionary item")
         require(DroppedLinkCodec.extract("javascript:alert(1)") == nil, "unsafe JS scheme rejected")
         require(DroppedLinkCodec.extract("file:///etc/passwd") == nil, "arbitrary file URL rejected")
         require(DroppedLinkCodec.decode(Data(repeating: 1, count: 128_001)) == nil, "oversized payload rejected")
@@ -35,24 +36,39 @@ struct DropLinkVerification {
 
         // Use actual Foundation NSItemProvider implementations (not a mocked parser).
         // Launch all representation requests using exactly the app's production reader.
-        @MainActor func checkProvider(_ label: String, _ provider: NSItemProvider) {
+        @MainActor func resolve(_ label: String, _ providers: [NSItemProvider]) -> (URL?, [String]) {
             var finished = false
             var actual: URL?
             var notes: [String] = []
-            let started = DroppedLinkReader.load(providers: [provider], note: {
+            let started = DroppedLinkReader.load(providers: providers, note: {
                 notes.append($0)
             }, completion: {
                 actual = $0
                 finished = true
             })
             require(started, "\(label): reader accepted provider")
-            let deadline = Date().addingTimeInterval(8)
-            while !finished && Date() < deadline {
+            let limit = Date().addingTimeInterval(max(8, DroppedLinkReader.deadline + 3))
+            while !finished && Date() < limit {
                 RunLoop.main.run(until: Date().addingTimeInterval(0.02))
             }
             require(finished, "\(label): reader callback arrived")
+            return (actual, notes)
+        }
+
+        @MainActor func checkProvider(_ label: String, _ provider: NSItemProvider) {
+            checkProviders(label, [provider])
+        }
+
+        @MainActor func checkProviders(_ label: String, _ providers: [NSItemProvider]) {
+            let (actual, notes) = resolve(label, providers)
             require(actual?.absoluteString == expected,
                     "\(label): resolved URL (\(notes.joined(separator: "; ")))")
+            print("PASS: NSItemProvider \(label)")
+        }
+
+        @MainActor func checkNoLink(_ label: String, _ providers: [NSItemProvider]) {
+            let (actual, notes) = resolve(label, providers)
+            require(actual == nil, "\(label): no URL (\(notes.joined(separator: "; ")))")
             print("PASS: NSItemProvider \(label)")
         }
 
@@ -79,6 +95,23 @@ struct DropLinkVerification {
             return nil
         }
         checkProvider("malformed URL + valid plain-text fallback", dual)
+
+        // The link may sit on a later item of a multi-item drag.
+        let label = NSItemProvider(object: "Release notes" as NSString)
+        let later = NSItemProvider()
+        later.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { complete in
+            complete(Data(expected.utf8), nil)
+            return nil
+        }
+        checkProviders("second item of a multi-item drag", [label, later])
+
+        // A drop with only a never-answering representation must finish as empty
+        // instead of leaving the handler silent forever.
+        let neverAnswers = NSItemProvider()
+        neverAnswers.registerDataRepresentation(forTypeIdentifier: UTType.url.identifier, visibility: .all) { _ in
+            Progress(totalUnitCount: 1)
+        }
+        checkNoLink("never-answering representation", [neverAnswers])
 
     }
 }

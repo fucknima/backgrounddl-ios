@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0.9</string>
+	<string>2.1.1</string>
 	<key>CFBundleVersion</key>
-	<string>24</string>
+	<string>26</string>
 	<!-- Experimental system document type for URL drops onto app icon.
          This only advertises support; SpringBoard controls icon drop behavior. -->
 	<key>CFBundleDocumentTypes</key>
@@ -34,6 +34,20 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>public.url</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Web links are opened as URLs, not as documents. Chrome and Firefox
+         declare the HTTP and HTTPS schemes here and no public.url document type. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>网页链接</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>http</string>
+				<string>https</string>
 			</array>
 		</dict>
 	</array>

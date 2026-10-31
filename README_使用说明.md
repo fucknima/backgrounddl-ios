@@ -158,3 +158,16 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 诊断记录明确区分每一种读取方式，**只显示表示名称、数据大小和网站域名，不记录完整签名 URL**。
 - 新增 macOS Foundation `NSItemProvider` 真正对象/数据模拟测试（NSURL、NSString、public.url 数据、无效 public.url + 有效文本回退），此项必须先通过，才会运行 iOS Release 构建。
 - 仍需用户的 iPhone 真机将链接拖入页面验证：自动测试不能模拟 Safari 原生网页的全部数据提供方式，也不能证明主屏幕图标直接松手会将链接交给第三方 App。
+
+## 2.1.1 · 图标拖放注册与多表示兜底
+
+- 真机日志里的「无匹配数据」来自旧版只调用一次 `loadItem("public.url")`：跨进程提供方会用 `(nil, nil)` 结束这次请求，任何类型转换都拿不到内容。2.0.9 已改为并行读取全部声明表示，本次构建补齐剩余边界。
+- 同一次拖放可能带多个项目：最多读取 4 项，任意一项解析出网页链接即打开，不再只检查第一项。
+- 新增 3 秒兜底：某个表示始终不回调时，读取以空结果结束并写入诊断，界面不会毫无反应。
+- 支持 `public.file-url` 原始对象，拖入 `.webloc` / `.url` 文件走同一解码器。
+- 兼容以字典对象提供的 `.webloc`（`URL` 键）。
+- 自动测试新增：多项目拖放、完全不回调的表示、字典对象。
+- 真机上的图标拖放只打开 App、不打开链接，原因在系统路由而不在解析：网页链接按 URL 打开处理，浏览器（Chrome、Firefox）都只声明 `http` / `https` URL 方案，不声明 `public.url` 文档类型；文档类 App 才用 `CFBundleDocumentTypes`。此前本 App 只声明了文档类型，图标会亮、App 会开，但系统没有可用的 URL 处理声明。
+- 本次在 `Info.plist` 新增 `CFBundleURLTypes` 的 `http` / `https` 方案，保留 `public.url` 文档声明以继续接受图标拖放。Swift 侧入口无需改动：`App 启动参数`、`AppDelegate openURL`、`Scene 冷启动`、`Scene openURLContexts`、`NSUserActivity` 都已接好。
+- 平台边界：`com.apple.developer.web-browser` 由 Apple 审批，侧载无法取得。如果系统只把网页链接交给默认浏览器，这次构建的表现为「图标亮、App 开、没有链接」，诊断里的 URL 计数仍为 0。判定方式是装 2.1.1 后做一次图标拖放，再看「设置 → 拖放诊断」。
+- 若计数为 0，改走 Safari 扩展按钮或快捷指令入口；仓库里已有 Safari 扩展的构建流水线。
