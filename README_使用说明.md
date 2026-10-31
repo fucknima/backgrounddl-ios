@@ -189,3 +189,9 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 拆开同一证书签名的 Via 1.9.0 IPA：entitlements 只有 `application-identifier`、`team-identifier`、iCloud 容器和 `aps-environment`，没有 `com.apple.developer.web-browser`；Info.plist 没有 `CFBundleDocumentTypes`，`CFBundleURLTypes` 是 http / https / viabrowser 加 `CFBundleTypeRole = Editor`。
 - 结论：图标拖放不需要 web-browser entitlement，之前的判断错了。差别在注册：2.1.2 多了 public.url 文档类型，URL 角色用了 Viewer。
 - 2.1.4 对齐 Via：删掉 `CFBundleDocumentTypes`，`CFBundleURLTypes` 改为 Editor，`CFBundleURLName` 用 bundle id，schemes 增加 `backgrounddl`，后续 Safari 扩展或快捷指令入口可直接用。
+
+## 2.1.5 · 撤回窗口级拖放，恢复页面内接收
+
+- 2.1.3 把拖放挂到 host window 的 `UIDropInteraction` 上，结果它抢走拖放却不投递，App 内拖放全部失效。这是回归，撤回。
+- 恢复 TabView 级 `.onDrop` 和浏览器页原有接收；设置页的 `Form`、下载页的 `List` 和根视图各自加 `.onDrop`，覆盖滚动区域。
+- 图标拖放的注册保持 2.1.4 不变。

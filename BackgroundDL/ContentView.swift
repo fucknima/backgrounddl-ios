@@ -1,6 +1,5 @@
 import SwiftUI
 import QuickLook
-import UIKit
 import UniformTypeIdentifiers
 
 private enum MainTab: Hashable {
@@ -14,6 +13,7 @@ struct ContentView: View {
     @State private var incomingLinkRevision = UUID()
     @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
     @State private var lastConsumedRevision: UUID?
+    @State private var isDropTargeted = false
     @State private var linkError = ""
     @State private var showLinkError = false
 
@@ -27,10 +27,10 @@ struct ContentView: View {
             }
                 .tabItem { Label("浏览器", systemImage: "safari") }
                 .tag(MainTab.browser)
-            NavigationStack { DownloadListView() }
+            NavigationStack { DownloadListView(acceptDroppedProviders: { importDrop($0) }) }
                 .tabItem { Label("下载", systemImage: "arrow.down.circle.fill") }
                 .tag(MainTab.downloads)
-            NavigationStack { DownloadSettingsView() }
+            NavigationStack { DownloadSettingsView(acceptDroppedProviders: { importDrop($0) }) }
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(MainTab.settings)
         }
@@ -45,13 +45,22 @@ struct ContentView: View {
                 incomingRouter.note("SwiftUI 用户活动没有网页链接")
             }
         }
-        // Accepts links dropped anywhere in the app, including the settings
-        // form and the downloads list, which own their scroll views and never
-        // reach a SwiftUI drop modifier attached to the tab view.
-        .background(
-            WindowLinkDropInstaller(accept: { importDrop($0) })
-                .frame(width: 1, height: 1)
-        )
+        // Catches drops over the tab bar and any tab that has no deeper target.
+        // The settings form and the downloads list install their own drop
+        // modifiers because their scroll views sit below this one.
+        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: $isDropTargeted) { providers in
+            importDrop(providers)
+        }
+        .overlay(alignment: .center) {
+            if isDropTargeted {
+                Label("松手打开链接", systemImage: "link")
+                    .font(.headline)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                    .allowsHitTesting(false)
+            }
+        }
         .alert("无法打开链接", isPresented: $showLinkError) {
             Button("确定", role: .cancel) {}
         } message: { Text(linkError) }
@@ -61,6 +70,9 @@ struct ContentView: View {
             consumePendingLink()
         }
         .onChange(of: incomingRouter.revision) { _, _ in consumePendingLink() }
+        .onChange(of: isDropTargeted) { _, targeted in
+            if targeted { incomingRouter.note("拖放目标已进入") }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 incomingRouter.note("App 回到前台")
@@ -102,82 +114,6 @@ struct ContentView: View {
     }
 }
 
-/// Installs one drop interaction on the host window instead of on a SwiftUI
-/// container, so a dragged link opens from every tab. The settings form and
-/// the downloads list are scroll views; a TabView-level `.onDrop` never sees
-/// drops that start over them.
-private struct WindowLinkDropInstaller: UIViewRepresentable {
-    let accept: ([NSItemProvider]) -> Bool
-
-    func makeUIView(context: Context) -> WindowDropInstallerView {
-        let view = WindowDropInstallerView()
-        view.accept = accept
-        return view
-    }
-
-    func updateUIView(_ view: WindowDropInstallerView, context: Context) {
-        view.accept = accept
-    }
-
-    static func dismantleUIView(_ view: WindowDropInstallerView, coordinator: ()) {
-        view.uninstall()
-    }
-}
-
-private final class WindowDropInstallerView: UIView, UIDropInteractionDelegate {
-    var accept: (([NSItemProvider]) -> Bool)?
-    private var interaction: UIDropInteraction?
-    private weak var hostWindow: UIWindow?
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-        isUserInteractionEnabled = false
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        guard let window else {
-            uninstall()
-            return
-        }
-        guard hostWindow !== window else { return }
-        uninstall()
-        let interaction = UIDropInteraction(delegate: self)
-        window.addInteraction(interaction)
-        self.interaction = interaction
-        hostWindow = window
-    }
-
-    func uninstall() {
-        if let interaction {
-            hostWindow?.removeInteraction(interaction)
-        }
-        interaction = nil
-        hostWindow = nil
-    }
-
-    func dropInteraction(_ interaction: UIDropInteraction, canHandle session: UIDropSession) -> Bool {
-        session.hasItemsConforming(toTypeIdentifiers: [
-            UTType.url.identifier,
-            UTType.fileURL.identifier,
-            UTType.plainText.identifier
-        ])
-    }
-
-    func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: UIDropSession) -> UIDropProposal {
-        UIDropProposal(operation: .copy)
-    }
-
-    func dropInteraction(_ interaction: UIDropInteraction, performDrop session: UIDropSession) {
-        _ = accept?(session.items.map { $0.itemProvider })
-    }
-}
-
 private enum DownloadSort: String, CaseIterable {
     case newest = "最新优先"
     case oldest = "最早优先"
@@ -204,6 +140,7 @@ private struct DetailSelection: Identifiable {
 }
 
 private struct DownloadListView: View {
+    let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @ObservedObject private var store = DownloadStore.shared
     @State private var filter: DownloadFilter = .all
     @State private var selectedDetail: DetailSelection?
@@ -283,9 +220,11 @@ private struct DownloadListView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) { acceptDroppedProviders($0) }
             }
         }
         .background(Color(uiColor: .systemBackground))
+        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) { acceptDroppedProviders($0) }
         .navigationTitle("下载")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -725,6 +664,7 @@ private struct DownloadDetailView: View {
 }
 
 private struct DownloadSettingsView: View {
+    let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @ObservedObject private var store = DownloadStore.shared
     @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
     @AppStorage("bgdl.downloadMode") private var downloadMode = "smart"
@@ -794,6 +734,7 @@ private struct DownloadSettingsView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
+        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: nil) { acceptDroppedProviders($0) }
         .navigationTitle("设置")
         .confirmationDialog("清除浏览历史？", isPresented: $showHistoryClear) {
             Button("清除历史", role: .destructive) { BrowserLibrary.shared.clearHistory() }
