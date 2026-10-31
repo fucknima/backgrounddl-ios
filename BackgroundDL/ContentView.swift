@@ -39,7 +39,6 @@ struct ContentView: View {
                             openDownloads: { selectedTab = .downloads },
                             openSettings: { selectedTab = .settings },
                             onScrollHideChange: { browserBarHidden = $0 },
-                            barHidden: browserBarHidden,
                             incomingLinkRevision: incomingLinkRevision,
                             acceptDroppedProviders: { providers in importDrop(providers) })
                     .tabItem { Label("浏览器", systemImage: "safari") }
@@ -66,8 +65,8 @@ struct ContentView: View {
                 .offset(y: (keyboardVisible || browserBarHidden) ? 120 : 0)
                 .opacity((keyboardVisible || browserBarHidden) ? 0 : 1)
                 .allowsHitTesting(!(keyboardVisible || browserBarHidden))
-                .animation(.spring(response: 0.42, dampingFraction: 0.88), value: keyboardVisible)
-                .animation(.spring(response: 0.42, dampingFraction: 0.88), value: browserBarHidden)
+                .animation(.spring(response: 0.5, dampingFraction: 0.9), value: keyboardVisible)
+                .animation(.spring(response: 0.5, dampingFraction: 0.9), value: browserBarHidden)
         }
         // Receives system-delivered URL documents, including candidates dropped
         // onto the app icon when iOS elects to dispatch them to third-party apps.
@@ -183,6 +182,33 @@ private struct AppBottomBar: View {
     @Namespace private var selectionPill
 
     var body: some View {
+        if #available(iOS 26.0, *) {
+            barContent
+                .glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            barContent
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                        .overlay {
+                            Capsule().fill(
+                                LinearGradient(colors: [.white.opacity(0.18), .clear, .white.opacity(0.03)],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                        }
+                )
+                .overlay {
+                    Capsule().strokeBorder(
+                        LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.1), .clear],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: 0.8
+                    )
+                }
+                .shadow(color: .black.opacity(0.18), radius: 20, y: 8)
+        }
+    }
+
+    private var barContent: some View {
         ZStack {
             browserControls
                 .opacity(selectedTab == .browser ? 1 : 0)
@@ -194,11 +220,6 @@ private struct AppBottomBar: View {
                 .allowsHitTesting(selectedTab != .browser)
         }
         .frame(height: 58)
-        .background(.regularMaterial, in: Capsule())
-        .overlay {
-            Capsule().strokeBorder(AppTheme.border)
-        }
-        .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
         .animation(.spring(response: 0.36, dampingFraction: 0.86), value: selectedTab)
     }
 

@@ -238,3 +238,9 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 浏览器页去掉外层 `NavigationStack`，网页容器直接忽略底部安全区；同时关闭 `WKWebView.scrollView` 的自动内容内边距，页面真正铺到屏幕底边。
 - 底栏改为常驻视图，用 offset + opacity 收放，不再插入/移除视图；spring 0.42 / 0.88，键盘与滚动共用同一动画。
 - 滚动判定加滞回：向下 40pt 才收起，向上 24pt 才出现，回到顶部强制出现；避免阈值附近抖动。
+
+## 2.3.3 · 底栏换成 Liquid Glass，按方向收放
+
+- 底栏材质：iOS 26 及以上直接用原生 `.glassEffect(.regular.interactive(), in: Capsule())`；旧系统用 ultraThinMaterial + 顶部高光渐变 + 玻璃描边 + 外阴影兜底。
+- 滚动逻辑改为按方向累计：页面往下走 28pt 收起，往回走 28pt 出现，到顶强制出现；不再用「当初隐藏的位置」做锚点，隐藏后在任何位置往回滑都会回来。
+- 收放动画改成 spring 0.5 / 0.9，offset + opacity 同步，更缓慢。

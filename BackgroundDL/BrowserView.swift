@@ -71,7 +71,6 @@ struct BrowserView: View {
     let openDownloads: () -> Void
     let openSettings: () -> Void
     let onScrollHideChange: (Bool) -> Void
-    let barHidden: Bool
     let incomingLinkRevision: UUID
     let acceptDroppedProviders: ([NSItemProvider]) -> Bool
     @FocusState private var isEditingAddress: Bool
@@ -85,7 +84,7 @@ struct BrowserView: View {
             if !state.notice.isEmpty { noticeCard }
             ZStack {
                 BrowserWebView(state: state, appearanceMode: webAppearanceMode,
-                           onScrollHideChange: onScrollHideChange, barHidden: barHidden)
+                           onScrollHideChange: onScrollHideChange)
                 if state.isHome {
                     BrowserStartPage(open: { url in
                         state.loadSharedURL(url)
@@ -266,7 +265,6 @@ private struct BrowserWebView: UIViewRepresentable {
     @ObservedObject var state: BrowserState
     let appearanceMode: String
     let onScrollHideChange: (Bool) -> Void
-    let barHidden: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     // Inject at document start so sites with white backgrounds do not first paint an
@@ -412,7 +410,6 @@ private struct BrowserWebView: UIViewRepresentable {
         context.coordinator.appearanceMode = appearanceMode
         context.coordinator.systemDark = colorScheme == .dark
         context.coordinator.onScrollHideChange = onScrollHideChange
-        context.coordinator.syncBarHidden(barHidden, scrollView: browser.scrollView)
         context.coordinator.syncPageTheme(webView: browser)
     }
 
@@ -424,8 +421,9 @@ private struct BrowserWebView: UIViewRepresentable {
         var onScrollHideChange: (Bool) -> Void
         private var lastAppearance = ""
         private var scrollObservation: NSKeyValueObservation?
-        private var anchorY: CGFloat = 0
-        private var lastHidden = false
+        private var lastOffsetY: CGFloat = 0
+        private var travel: CGFloat = 0
+        private var lastDirection: Int = 0
 
         init(state: BrowserState, appearanceMode: String, systemDark: Bool,
              onScrollHideChange: @escaping (Bool) -> Void) {
@@ -435,36 +433,30 @@ private struct BrowserWebView: UIViewRepresentable {
             self.onScrollHideChange = onScrollHideChange
         }
 
-        func syncBarHidden(_ hidden: Bool, scrollView: UIScrollView) {
-            guard hidden != lastHidden else { return }
-            lastHidden = hidden
-            anchorY = scrollView.contentOffset.y
-        }
-
         func observe(_ scrollView: UIScrollView) {
-            anchorY = scrollView.contentOffset.y
+            lastOffsetY = scrollView.contentOffset.y
             scrollObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
                 let y = scroll.contentOffset.y
                 DispatchQueue.main.async {
                     guard let self else { return }
-                    if y <= 8 {
-                        self.anchorY = y
-                        if self.lastHidden {
-                            self.lastHidden = false
-                            self.onScrollHideChange(false)
-                        }
+                    let delta = y - self.lastOffsetY
+                    self.lastOffsetY = y
+                    if y <= 6 {
+                        self.travel = 0
+                        self.lastDirection = 0
+                        self.onScrollHideChange(false)
                         return
                     }
-                    if self.lastHidden {
-                        if self.anchorY - y > 24 {
-                            self.lastHidden = false
-                            self.anchorY = y
-                            self.onScrollHideChange(false)
-                        }
-                    } else if y - self.anchorY > 40 && y > 80 {
-                        self.lastHidden = true
-                        self.anchorY = y
-                        self.onScrollHideChange(true)
+                    guard abs(delta) > 0.5 else { return }
+                    let direction = delta > 0 ? 1 : -1
+                    if direction != self.lastDirection {
+                        self.travel = 0
+                        self.lastDirection = direction
+                    }
+                    self.travel += abs(delta)
+                    if self.travel >= 28 {
+                        self.travel = 0
+                        self.onScrollHideChange(direction > 0)
                     }
                 }
             }
