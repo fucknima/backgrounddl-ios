@@ -5,8 +5,8 @@ import UniformTypeIdentifiers
 
 enum AppTheme {
     static let accent = Color.cyan
-    static let pageBackground = AppTheme.pageBackground
-    static let card = AppTheme.card
+    static let pageBackground = Color(uiColor: .systemGroupedBackground)
+    static let card = Color(uiColor: .secondarySystemGroupedBackground)
     static let border = Color.primary.opacity(0.06)
     static let pagePadding: CGFloat = 18
     static let cardRadius: CGFloat = 20
