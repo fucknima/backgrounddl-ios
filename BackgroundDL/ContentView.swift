@@ -1,5 +1,6 @@
 import SwiftUI
 import QuickLook
+import UniformTypeIdentifiers
 
 private enum MainTab: Hashable {
     case browser, downloads, settings
@@ -9,13 +10,17 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: MainTab = .browser
     @State private var sharedURL: URL?
+    @State private var incomingLinkRevision = UUID()
+    @State private var isDropTargeted = false
+    @State private var linkError = ""
+    @State private var showLinkError = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
                 BrowserView(sharedURL: sharedURL, openDownloads: {
                     selectedTab = .downloads
-                })
+                }, incomingLinkRevision: incomingLinkRevision)
             }
                 .tabItem { Label("浏览器", systemImage: "safari") }
                 .tag(MainTab.browser)
@@ -27,6 +32,27 @@ struct ContentView: View {
                 .tag(MainTab.settings)
         }
         .tint(.cyan)
+        // Receives system-delivered URL documents, including candidates dropped
+        // onto the app icon when iOS elects to dispatch them to third-party apps.
+        .onOpenURL { url in acceptIncoming(url) }
+        // Also accepts links dropped after the app has opened. The separate
+        // SwiftUI drop target is a fallback for origins that offer plain text.
+        .onDrop(of: [UTType.url, UTType.plainText], isTargeted: $isDropTargeted) { providers in
+            importDrop(providers)
+        }
+        .overlay(alignment: .center) {
+            if isDropTargeted {
+                Label("松手打开链接", systemImage: "link")
+                    .font(.headline)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                    .allowsHitTesting(false)
+            }
+        }
+        .alert("无法打开链接", isPresented: $showLinkError) {
+            Button("确定", role: .cancel) {}
+        } message: { Text(linkError) }
         .onAppear(perform: acceptSharedLink)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { acceptSharedLink() }
@@ -35,8 +61,64 @@ struct ContentView: View {
 
     private func acceptSharedLink() {
         guard let url = SharedLinkInbox.takeNext() else { return }
-        sharedURL = url
+        acceptIncoming(url)
+    }
+
+    private func acceptIncoming(_ incoming: URL) {
+        guard let scheme = incoming.scheme?.lowercased(),
+              (scheme == "https" || scheme == "http"),
+              incoming.host != nil, incoming.user == nil, incoming.password == nil else {
+            linkError = "仅支持 HTTP 或 HTTPS 网页链接。"
+            showLinkError = true
+            return
+        }
+        sharedURL = incoming
+        // A fresh revision makes identical consecutive drops open the link again.
+        incomingLinkRevision = UUID()
         selectedTab = .browser
+    }
+
+    private func importDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first(where: {
+            $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) ||
+            $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier)
+        }) else { return false }
+        let type = provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
+            ? UTType.url.identifier : UTType.plainText.identifier
+        // The load must start synchronously inside the drop callback: iOS does
+        // not guarantee access to the item provider after the callback returns.
+        provider.loadItem(forTypeIdentifier: type, options: nil) { item, error in
+            let link: URL?
+            if let value = item as? URL { link = value }
+            else if let value = item as? String { link = Self.extractWebURL(value) }
+            else if let data = item as? Data, let text = String(data: data, encoding: .utf8) {
+                link = Self.extractWebURL(text)
+            } else { link = nil }
+            DispatchQueue.main.async {
+                if let link {
+                    acceptIncoming(link)
+                } else {
+                    linkError = error?.localizedDescription ?? "拖入内容不是可识别的网页链接。"
+                    showLinkError = true
+                }
+            }
+        }
+        return true
+    }
+
+    private static func extractWebURL(_ text: String) -> URL? {
+        let stripped = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: stripped), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            return url
+        }
+        // A dragged text selection can include surrounding text. Extract only
+        // a normal web link; never execute arbitrary script or custom schemes.
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue),
+              let match = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let url = match.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            return nil
+        }
+        return url
     }
 }
 

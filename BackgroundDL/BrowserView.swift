@@ -67,6 +67,7 @@ final class BrowserState: ObservableObject {
 struct BrowserView: View {
     let sharedURL: URL?
     let openDownloads: () -> Void
+    let incomingLinkRevision: UUID
     @StateObject private var state = BrowserState()
     @FocusState private var isEditingAddress: Bool
     @AppStorage("bgdl.webAppearanceMode") private var webAppearanceMode = "auto"
@@ -241,8 +242,8 @@ struct BrowserView: View {
         .onAppear {
             if let sharedURL { state.loadSharedURL(sharedURL) }
         }
-        .onChange(of: sharedURL) { _, url in
-            if let url { state.loadSharedURL(url) }
+        .onChange(of: incomingLinkRevision) { _, _ in
+            if let sharedURL { state.loadSharedURL(sharedURL) }
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showHistory) {

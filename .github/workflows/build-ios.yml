@@ -89,6 +89,25 @@ jobs:
           assert 'state.notice = "已接管：' in browser
           print("PASS: tap captured-download notice switches tab and clears banner")
           PY
+      - name: Validate URL drag and home-icon registration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          plist = plistlib.loads(Path("BackgroundDL/Info.plist").read_bytes())
+          assert any("public.url" in entry["LSItemContentTypes"]
+                     for entry in plist["CFBundleDocumentTypes"])
+          app = Path("BackgroundDL/ContentView.swift").read_text()
+          browser = Path("BackgroundDL/BrowserView.swift").read_text()
+          assert ".onOpenURL { url in acceptIncoming(url) }" in app
+          assert "UTType.url, UTType.plainText" in app
+          assert "incomingLinkRevision = UUID()" in app
+          assert "private func importDrop(" in app
+          assert 'incomingLinkRevision: incomingLinkRevision' in app
+          assert ".onChange(of: incomingLinkRevision)" in browser
+          assert 'let incomingLinkRevision: UUID' in browser
+          print("PASS: document type registration, URL callback, cross-app drop and duplicate-link handling")
+          PY
       - name: Build without code signing
         shell: bash
         run: |

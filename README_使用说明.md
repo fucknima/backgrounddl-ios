@@ -123,3 +123,12 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 点击提示主体会先清除提示状态，再通过主 TabView 状态切换至下载页；用户返回浏览器后不再看到这条旧提示。
 - 提示右侧关闭按钮只负责关闭，避免误触跳转；无下载提示时不占用网页高度。
 - 不变更 URLSession 下载队列、Cookie、App Group、文件管理或完成记录。
+
+## 2.0.6 · URL 图标拖放实验版
+
+- 主 App Info.plist 新增 `CFBundleDocumentTypes`，声明 `public.url` 网页链接作为可查看的文档类型，尝试使 iOS 主屏幕图标识别拖来的 URL；是否出现绿色＋由 iOS SpringBoard 决定，苹果文档未承诺第三方 App 与 Safari 完全一致。
+- SwiftUI 主页面 `onOpenURL` 接收系统传来的 HTTP/HTTPS 链接，自动切换到内置浏览器，并打开 URL；同一链接连续拖入也会重新加载。
+- 主 App `onDrop` 支持从其他 App 传来的 `public.url` / `public.plain-text`，拖入时提示“松手打开链接”，普通文本中也尝试识别网页 URL。
+- 只接受 HTTP(S) 且必须有有效主机名，拒绝 javascript/data/file 等不应当直接打开的协议；不将分享页面误当成直接下载文件。
+- 继续保留 iOS 分享扩展、原 App Group、灵动岛、后台传输引擎、下载任务数据与三栏界面。
+- **真机测试**：长按 Safari/聊天链接 → 保持拖动回主屏幕 → 拖到后台下载图标 → 检查绿色＋与松手后的导航。如果图标无＋，属于平台对文档类型拖放的实际分发差异，App 内拖放和分享扩展仍可用。
