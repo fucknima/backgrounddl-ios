@@ -177,3 +177,9 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 2.1.1 真机日志：图标拖放触发的是冷启动，`场景配置请求` 与 `Scene 冷启动` 的 URL、用户活动计数都是 0。系统只启动了 App，没有投递链接。
 - Apple 的 `CFBundleURLTypes` 文档把 `CFBundleTypeRole` 标为必需键；2.1.1 缺这个键，URL 类型可能没有被 LaunchServices 接受。本次补 `Viewer`，并把 `CFBundleURLName` 改为反向域名 `com.example.backgrounddl.web`。
 - 仍是判定版本：若计数继续为 0，说明 iOS 只把网页链接交给默认浏览器，侧载拿不到 `com.apple.developer.web-browser`，图标拖放到此为止，改走 Safari 扩展按钮。
+
+## 2.1.3 · App 内任意页面接收拖放
+
+- 2.1.1 与 2.1.2 的真机结论：未设默认浏览器的 Chrome 也能接住图标拖放；Chrome、Firefox 的 App entitlements 都带 `com.apple.developer.web-browser`。这是 Apple 审批的 managed entitlement，个人侧载 profile 里没有，图标拖放对侧载 App 走不通，后续不再加 plist 键。
+- App 内拖放改为窗口级 `UIDropInteraction`：挂在 host window 上，浏览器、下载、设置三个 tab 的任意位置都能接住链接。原来的 TabView 级 `.onDrop` 覆盖不到设置表单和下载列表的滚动视图。
+- 解析仍走 `DroppedLinkReader`；失败照旧写入「设置 → 拖放诊断」并弹窗。

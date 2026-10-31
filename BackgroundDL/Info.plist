@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.1.2</string>
+	<string>2.1.3</string>
 	<key>CFBundleVersion</key>
-	<string>27</string>
+	<string>28</string>
 	<!-- Experimental system document type for URL drops onto app icon.
          This only advertises support; SpringBoard controls icon drop behavior. -->
 	<key>CFBundleDocumentTypes</key>

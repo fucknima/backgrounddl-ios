@@ -1,5 +1,6 @@
 import SwiftUI
 import QuickLook
+import UIKit
 import UniformTypeIdentifiers
 
 private enum MainTab: Hashable {
@@ -13,7 +14,6 @@ struct ContentView: View {
     @State private var incomingLinkRevision = UUID()
     @ObservedObject private var incomingRouter = IncomingLinkRouter.shared
     @State private var lastConsumedRevision: UUID?
-    @State private var isDropTargeted = false
     @State private var linkError = ""
     @State private var showLinkError = false
 
@@ -45,21 +45,13 @@ struct ContentView: View {
                 incomingRouter.note("SwiftUI 用户活动没有网页链接")
             }
         }
-        // Also accepts links dropped after the app has opened. The separate
-        // SwiftUI drop target is a fallback for origins that offer plain text.
-        .onDrop(of: [UTType.url, UTType.fileURL, UTType.plainText], isTargeted: $isDropTargeted) { providers in
-            importDrop(providers)
-        }
-        .overlay(alignment: .center) {
-            if isDropTargeted {
-                Label("松手打开链接", systemImage: "link")
-                    .font(.headline)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 16)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                    .allowsHitTesting(false)
-            }
-        }
+        // Accepts links dropped anywhere in the app, including the settings
+        // form and the downloads list, which own their scroll views and never
+        // reach a SwiftUI drop modifier attached to the tab view.
+        .background(
+            WindowLinkDropInstaller(accept: { importDrop($0) })
+                .frame(width: 1, height: 1)
+        )
         .alert("无法打开链接", isPresented: $showLinkError) {
             Button("确定", role: .cancel) {}
         } message: { Text(linkError) }
@@ -69,9 +61,6 @@ struct ContentView: View {
             consumePendingLink()
         }
         .onChange(of: incomingRouter.revision) { _, _ in consumePendingLink() }
-        .onChange(of: isDropTargeted) { _, targeted in
-            if targeted { incomingRouter.note("拖放目标已进入") }
-        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 incomingRouter.note("App 回到前台")
@@ -110,6 +99,82 @@ struct ContentView: View {
                 showLinkError = true
             }
         })
+    }
+}
+
+/// Installs one drop interaction on the host window instead of on a SwiftUI
+/// container, so a dragged link opens from every tab. The settings form and
+/// the downloads list are scroll views; a TabView-level `.onDrop` never sees
+/// drops that start over them.
+private struct WindowLinkDropInstaller: UIViewRepresentable {
+    let accept: ([NSItemProvider]) -> Bool
+
+    func makeUIView(context: Context) -> WindowDropInstallerView {
+        let view = WindowDropInstallerView()
+        view.accept = accept
+        return view
+    }
+
+    func updateUIView(_ view: WindowDropInstallerView, context: Context) {
+        view.accept = accept
+    }
+
+    static func dismantleUIView(_ view: WindowDropInstallerView, coordinator: ()) {
+        view.uninstall()
+    }
+}
+
+private final class WindowDropInstallerView: UIView, UIDropInteractionDelegate {
+    var accept: (([NSItemProvider]) -> Bool)?
+    private var interaction: UIDropInteraction?
+    private weak var hostWindow: UIWindow?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard let window else {
+            uninstall()
+            return
+        }
+        guard hostWindow !== window else { return }
+        uninstall()
+        let interaction = UIDropInteraction(delegate: self)
+        window.addInteraction(interaction)
+        self.interaction = interaction
+        hostWindow = window
+    }
+
+    func uninstall() {
+        if let interaction {
+            hostWindow?.removeInteraction(interaction)
+        }
+        interaction = nil
+        hostWindow = nil
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, canHandle session: UIDropSession) -> Bool {
+        session.hasItemsConforming(toTypeIdentifiers: [
+            UTType.url.identifier,
+            UTType.fileURL.identifier,
+            UTType.plainText.identifier
+        ])
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: UIDropSession) -> UIDropProposal {
+        UIDropProposal(operation: .copy)
+    }
+
+    func dropInteraction(_ interaction: UIDropInteraction, performDrop session: UIDropSession) {
+        _ = accept?(session.items.map { $0.itemProvider })
     }
 }
 
