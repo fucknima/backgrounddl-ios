@@ -152,7 +152,7 @@ jobs:
           app = plistlib.loads(Path("BackgroundDL/Info.plist").read_bytes())
           extension = plistlib.loads(Path("BackgroundDLShareExtension/Info.plist").read_bytes())
           assert r"detectValues(for: [\.probableWebURL])" in watcher
-          assert "UIPasteboard.general.changeCount" in watcher
+          assert "pasteboard.changeCount" in watcher
           assert "values.probableWebURL" in watcher
           assert "ClipboardLinkWatcher.shared.check" in content
           assert "scheduleClipboardCheck()" in content
