@@ -6,7 +6,8 @@ enum SharedLinkInbox {
     /// Drains the inbox and returns the most recent valid link. A stale entry
     /// must never shadow a link the user just shared.
     static func takeLatest() -> URL? {
-        guard let defaults = UserDefaults(suiteName: suite) else { return nil }
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) != nil,
+              let defaults = UserDefaults(suiteName: suite) else { return nil }
         defaults.synchronize()
         let queue = defaults.stringArray(forKey: key) ?? []
         guard !queue.isEmpty else { return nil }

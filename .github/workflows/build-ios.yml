@@ -163,6 +163,8 @@ jobs:
           assert "DroppedLinkCodec.extract(fallbackText)" in share
           assert "DroppedLinkCodec.decode(item: item)" in share
           assert "UIPasteboard.general.setItems" in share
+          assert "containerURL(forSecurityApplicationGroupIdentifier:" in share
+          assert "containerURL(forSecurityApplicationGroupIdentifier:" in inbox
           assert "WebMainResource" in codec
           assert app["NSAppTransportSecurity"]["NSAllowsArbitraryLoadsInWebContent"] is True
           rules = extension["NSExtension"]["NSExtensionAttributes"]["NSExtensionActivationRule"]

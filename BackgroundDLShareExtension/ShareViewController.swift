@@ -121,7 +121,8 @@ final class ShareViewController: UIViewController {
         timeoutWorkItem?.cancel()
 
         var stored = false
-        if let defaults = UserDefaults(suiteName: group) {
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil,
+           let defaults = UserDefaults(suiteName: group) {
             var pending = defaults.stringArray(forKey: key) ?? []
             if !pending.contains(url.absoluteString) { pending.append(url.absoluteString) }
             defaults.set(Array(pending.suffix(25)), forKey: key)
