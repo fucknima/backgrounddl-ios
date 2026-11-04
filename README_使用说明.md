@@ -252,3 +252,10 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 分享收件箱改为取最新一条并清空队列，旧链接不会挡住刚刚分享的链接。
 - App Group 不可用时（重签名常见），分享扩展把链接写入剪贴板；打开 App 后由剪贴板检测接手，不再出现「已收取但打不开」。
 - 浏览器放开 HTTP(S)：Info.plist 允许 WKWebView 加载网页内容中的 http 资源，地址栏、历史记录与分享链接统一接受 http/https。
+
+## 2.4.1 · 分享完成直接打开 App
+
+- 分享扩展点「完成」时，通过响应链上的 `UIScene.open` 打开 `backgrounddl://open?url=...`，不再只是关闭分享面板。
+- App 端解析 `backgrounddl` 深链中的 `url` 参数，即使 App Group 与剪贴板都不可用也能打开分享链接。
+- 如果系统拦截场景打开，仍回退到 `extensionContext.open`；1 秒后必定关闭分享面板，不会卡住。
+- 版本 2.4.1 (41)。

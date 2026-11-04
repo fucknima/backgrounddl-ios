@@ -19,6 +19,9 @@ final class ShareViewController: UIViewController {
     private var pendingAttempts = 0
     private var settled = false
     private var timeoutWorkItem: DispatchWorkItem?
+    private var deliveredURL: URL?
+    private var finishing = false
+    private var completed = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -118,6 +121,7 @@ final class ShareViewController: UIViewController {
     private func deliver(_ url: URL) {
         guard !settled else { return }
         settled = true
+        deliveredURL = url
         timeoutWorkItem?.cancel()
 
         var stored = false
@@ -137,10 +141,9 @@ final class ShareViewController: UIViewController {
             ], options: [:])
         }
 
-        let host = url.host ?? "网页"
         show(stored
-             ? "已发送到「后台下载」\n返回 App 会自动打开 \(host)"
-             : "已复制链接到剪贴板\n打开「后台下载」会自动打开 \(host)",
+             ? "已发送到「后台下载」\n点「完成」打开 App"
+             : "已复制链接到剪贴板\n点「完成」打开 App",
              success: true)
     }
 
@@ -153,6 +156,63 @@ final class ShareViewController: UIViewController {
     }
 
     @objc private func finish() {
+        guard !finishing else { return }
+        finishing = true
+        guard let url = deliveredURL else {
+            complete()
+            return
+        }
+        ShareLauncher.open(ShareLauncher.deepLink(for: url), from: self) { [weak self] _ in
+            self?.complete()
+        }
+        // Never leave the share sheet waiting if the scene does not answer.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.complete()
+        }
+    }
+
+    private func complete() {
+        guard !completed else { return }
+        completed = true
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    }
+}
+
+private enum ShareLauncher {
+    static func deepLink(for link: URL) -> URL {
+        var components = URLComponents()
+        components.scheme = "backgrounddl"
+        components.host = "open"
+        components.queryItems = [URLQueryItem(name: "url", value: link.absoluteString)]
+        return components.url ?? URL(string: "backgrounddl://open")!
+    }
+
+    /// Share extensions cannot call UIApplication.shared. Opening through the
+    /// extension's UIScene is the remaining public path on current iOS.
+    static func open(_ url: URL, from controller: UIViewController, completion: @escaping (Bool) -> Void) {
+        var responder: UIResponder? = controller
+        while let current = responder {
+            if let scene = current as? UIScene {
+                scene.open(url, options: nil) { success in
+                    if success {
+                        completion(true)
+                    } else {
+                        openViaExtensionContext(url, from: controller, completion: completion)
+                    }
+                }
+                return
+            }
+            responder = current.next
+        }
+        openViaExtensionContext(url, from: controller, completion: completion)
+    }
+
+    private static func openViaExtensionContext(_ url: URL, from controller: UIViewController,
+                                                completion: @escaping (Bool) -> Void) {
+        guard let context = controller.extensionContext else {
+            completion(false)
+            return
+        }
+        context.open(url) { success in completion(success) }
     }
 }

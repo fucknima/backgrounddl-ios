@@ -149,6 +149,7 @@ jobs:
           share = Path("BackgroundDLShareExtension/ShareViewController.swift").read_text()
           codec = Path("BackgroundDL/DroppedLinkReader.swift").read_text()
           inbox = Path("BackgroundDL/SharedLinkInbox.swift").read_text()
+          appDelegate = Path("BackgroundDL/BackgroundDLApp.swift").read_text()
           app = plistlib.loads(Path("BackgroundDL/Info.plist").read_bytes())
           extension = plistlib.loads(Path("BackgroundDLShareExtension/Info.plist").read_bytes())
           assert r"detectValues(for: [\.probableWebURL])" in watcher
@@ -165,6 +166,11 @@ jobs:
           assert "UIPasteboard.general.setItems" in share
           assert "containerURL(forSecurityApplicationGroupIdentifier:" in share
           assert "containerURL(forSecurityApplicationGroupIdentifier:" in inbox
+          assert "scene.open" in share
+          assert 'components.scheme = "backgrounddl"' in share
+          assert 'name: "url"' in share
+          assert 'incoming.scheme?.lowercased() == "backgrounddl"' in appDelegate
+          assert '$0.name == "url"' in appDelegate
           assert "WebMainResource" in codec
           assert app["NSAppTransportSecurity"]["NSAllowsArbitraryLoadsInWebContent"] is True
           rules = extension["NSExtension"]["NSExtensionAttributes"]["NSExtensionActivationRule"]

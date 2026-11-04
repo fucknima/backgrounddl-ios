@@ -151,6 +151,12 @@ enum IncomingLinkDecoder {
            scheme == "http" || scheme == "https" {
             return validate(incoming)
         }
+        if incoming.scheme?.lowercased() == "backgrounddl",
+           let components = URLComponents(url: incoming, resolvingAgainstBaseURL: false),
+           let raw = components.queryItems?.first(where: { $0.name == "url" })?.value,
+           let nested = URL(string: raw) {
+            return validate(nested)
+        }
         guard incoming.isFileURL else { return nil }
         let allowed = incoming.startAccessingSecurityScopedResource()
         defer { if allowed { incoming.stopAccessingSecurityScopedResource() } }
