@@ -244,3 +244,11 @@ GitHub Actions 包含 `Tests/main.swift` 测试 HTTP Content-Range 解析、19.9
 - 底栏材质：iOS 26 及以上直接用原生 `.glassEffect(.regular.interactive(), in: Capsule())`；旧系统用 ultraThinMaterial + 顶部高光渐变 + 玻璃描边 + 外阴影兜底。
 - 滚动逻辑改为按方向累计：页面往下走 28pt 收起，往回走 28pt 出现，到顶强制出现；不再用「当初隐藏的位置」做锚点，隐藏后在任何位置往回滑都会回来。
 - 收放动画改成 spring 0.5 / 0.9，offset + opacity 同步，更缓慢。
+
+## 2.4.0 · 剪贴板自动打开与第三方分享修复
+
+- 剪贴板检测：App 回到前台时用 `UIPasteboard.detectValues(for: [\.probableWebURL])` 读取系统识别出的网页链接，不弹「已粘贴」提示；有新链接就切到浏览器直接打开，同一链接 10 分钟内不重复打开。
+- 分享扩展：支持第三方 App 常见的「标题 + 链接」文本、`public.url`、纯文本、`com.apple.webarchive` 网页归档；4 秒兜底，避免某个 provider 不回调时一直转圈。
+- 分享收件箱改为取最新一条并清空队列，旧链接不会挡住刚刚分享的链接。
+- App Group 不可用时（重签名常见），分享扩展把链接写入剪贴板；打开 App 后由剪贴板检测接手，不再出现「已收取但打不开」。
+- 浏览器放开 HTTP(S)：Info.plist 允许 WKWebView 加载网页内容中的 http 资源，地址栏、历史记录与分享链接统一接受 http/https。

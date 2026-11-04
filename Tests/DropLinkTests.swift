@@ -22,6 +22,12 @@ struct DropLinkVerification {
             fromPropertyList: ["URL": expected], format: .binary, options: 0
         )
         same(DroppedLinkCodec.decode(webloc), "binary .webloc")
+        let webarchive = try PropertyListSerialization.data(
+            fromPropertyList: ["WebMainResource": ["WebResourceURL": expected]],
+            format: .binary, options: 0
+        )
+        same(DroppedLinkCodec.decode(webarchive), "WebKit web archive main resource")
+        same(DroppedLinkCodec.extract("【标题】看看这个 \(expected) 很好"), "share text with title")
         let archivedURL = try NSKeyedArchiver.archivedData(
             withRootObject: NSURL(string: expected)!, requiringSecureCoding: true
         )

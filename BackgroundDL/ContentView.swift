@@ -30,6 +30,7 @@ struct ContentView: View {
     @State private var isDropTargeted = false
     @State private var linkError = ""
     @State private var showLinkError = false
+    @State private var lastIngressAt = Date.distantPast
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -119,6 +120,7 @@ struct ContentView: View {
             incomingRouter.note("主界面出现")
             acceptSharedLink()
             consumePendingLink()
+            scheduleClipboardCheck()
         }
         .onChange(of: incomingRouter.revision) { _, _ in consumePendingLink() }
         .onChange(of: isDropTargeted) { _, targeted in
@@ -129,6 +131,7 @@ struct ContentView: View {
                 incomingRouter.note("App 回到前台")
                 acceptSharedLink()
                 consumePendingLink()
+                scheduleClipboardCheck()
             }
         }
         .onChange(of: selectedTab) { _, _ in
@@ -143,7 +146,7 @@ struct ContentView: View {
     }
 
     private func acceptSharedLink() {
-        guard let url = SharedLinkInbox.takeNext() else { return }
+        guard let url = SharedLinkInbox.takeLatest() else { return }
         incomingRouter.receive(url, from: "系统分享收件箱")
     }
 
@@ -154,7 +157,27 @@ struct ContentView: View {
         sharedURL = url
         incomingLinkRevision = UUID()
         selectedTab = .browser
+        lastIngressAt = Date()
         incomingRouter.note("浏览器已打开：\(url.host ?? "网页")")
+    }
+
+    // An explicit open/share wins over whatever was left on the pasteboard.
+    private func scheduleClipboardCheck() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard scenePhase == .active else { return }
+            ClipboardLinkWatcher.shared.check { url in
+                handleClipboardLink(url)
+            }
+        }
+    }
+
+    private func handleClipboardLink(_ url: URL) {
+        guard scenePhase == .active,
+              Date().timeIntervalSince(lastIngressAt) > 2.5 else { return }
+        if let current = browserState.webView?.url,
+           current.absoluteString == url.absoluteString { return }
+        incomingRouter.receive(url, from: "剪贴板")
     }
 
     private func importDrop(_ providers: [NSItemProvider]) -> Bool {

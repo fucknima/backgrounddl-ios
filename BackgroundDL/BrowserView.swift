@@ -38,9 +38,9 @@ final class BrowserState: ObservableObject {
         guard !input.isEmpty else { return }
         let normalized = input.contains("://") ? input : "https://" + input
         guard let url = URL(string: normalized),
-              url.scheme?.lowercased() == "https", url.host != nil,
+              ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
               url.user == nil, url.password == nil else {
-            report("请输入有效的 HTTPS 网址。")
+            report("请输入有效的 HTTP(S) 网址。")
             return
         }
         isHome = false
@@ -58,7 +58,8 @@ final class BrowserState: ObservableObject {
         canGoForward = view.canGoForward
         isLoading = view.isLoading
         if let title = view.title, !title.isEmpty { currentTitle = title }
-        if let url = view.url, url.scheme?.lowercased() == "https" {
+        if let url = view.url,
+           ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
             isHome = false
             address = url.absoluteString
         }
@@ -476,7 +477,8 @@ private struct BrowserWebView: UIViewRepresentable {
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             state.updateNavigation(webView)
-            if let url = webView.url, url.scheme?.lowercased() == "https" {
+            if let url = webView.url,
+               ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
                 BrowserLibrary.shared.record(url: url, title: webView.title ?? url.host ?? "网页")
             }
             syncPageTheme(webView: webView, force: true)

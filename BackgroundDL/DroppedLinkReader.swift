@@ -28,11 +28,14 @@ enum DroppedLinkCodec {
         guard !data.isEmpty, data.count <= maximumBytes else { return nil }
 
         // On iOS, dragging an URL sometimes produces a binary/XML .webloc.
+        // Some apps share a WebKit web archive instead of a bare URL.
         if let property = try? PropertyListSerialization.propertyList(from: data, format: nil),
-           let dictionary = property as? [String: Any],
-           let value = dictionary["URL"] as? String,
-           let url = extract(value) {
-            return url
+           let dictionary = property as? [String: Any] {
+            if let value = dictionary["URL"] as? String,
+               let url = extract(value) { return url }
+            if let main = dictionary["WebMainResource"] as? [String: Any],
+               let value = main["WebResourceURL"] as? String,
+               let url = extract(value) { return url }
         }
 
         // Some URL representations contain a secure archived NSURL.
