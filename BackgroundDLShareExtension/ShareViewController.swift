@@ -33,7 +33,13 @@ final class ShareViewController: UIViewController {
         subtitle.numberOfLines = 4
         subtitle.textColor = .secondaryLabel
         subtitle.text = "正在读取链接…"
-        done.setTitle("完成", for: .normal)
+        done.setTitle("完成并打开 App", for: .normal)
+        done.titleLabel?.font = .preferredFont(forTextStyle: .headline)
+        done.setTitleColor(.white, for: .normal)
+        done.backgroundColor = .systemBlue
+        done.layer.cornerRadius = 12
+        done.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        done.alpha = 0.45
         done.isEnabled = false
         done.addTarget(self, action: #selector(finish), for: .touchUpInside)
         let stack = UIStackView(arrangedSubviews: [titleText, subtitle, done])
@@ -152,6 +158,7 @@ final class ShareViewController: UIViewController {
             self.titleText.text = success ? "已添加到下载器" : "导入失败"
             self.subtitle.text = message
             self.done.isEnabled = true
+            self.done.alpha = 1
         }
     }
 
